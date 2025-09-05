@@ -81,7 +81,6 @@ export default function AIResearcherAgent() {
   });
   const [generatingMore, setGeneratingMore] = useState(false);
   const [additionalResearchData, setAdditionalResearchData] = useState<any>(null);
-  const [autoLoadEnabled, setAutoLoadEnabled] = useState(true);
   const [lastAutoLoadTime, setLastAutoLoadTime] = useState<number>(0);
   const [isAutoLoading, setIsAutoLoading] = useState(false);
   const [autoLoadCount, setAutoLoadCount] = useState(0);
@@ -97,7 +96,6 @@ export default function AIResearcherAgent() {
     console.log('Research modal state changed:', showResearchModal);
   }, [showResearchModal]);
   const resultsRef = useRef<HTMLDivElement>(null);
-  const autoLoadTriggerRef = useRef<HTMLDivElement>(null);
 
   // Auto-open research modal when component mounts
   useEffect(() => {
@@ -110,9 +108,9 @@ export default function AIResearcherAgent() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Auto-load more content when user scrolls to bottom
+  // Generate more content when button is clicked
   const handleAutoLoad = async () => {
-    if (!autoLoadEnabled || isAutoLoading || !researchData) return;
+    if (isAutoLoading || !researchData) return;
     
     const now = Date.now();
     const timeSinceLastLoad = now - lastAutoLoadTime;
@@ -239,11 +237,12 @@ Focus on providing EXTREMELY DETAILED, DATA-RICH insights with specific numbers,
       setResearchResults(prev => prev + additionalContent);
       
       // Smooth scroll to show new content
+      // Scroll to results after successful research
       setTimeout(() => {
-        if (autoLoadTriggerRef.current) {
-          autoLoadTriggerRef.current.scrollIntoView({ 
+        if (resultsRef.current) {
+          resultsRef.current.scrollIntoView({ 
             behavior: 'smooth', 
-            block: 'center' 
+            block: 'start' 
           });
         }
       }, 500);
@@ -379,64 +378,15 @@ Focus on providing EXTREMELY DETAILED, DATA-RICH insights with specific numbers,
     }, 2000);
   };
 
-  // Enhanced auto-load with intersection observer for better performance
-  useEffect(() => {
-    if (!autoLoadEnabled || !researchData || !autoLoadTriggerRef.current) return;
+  // Manual generate more functionality (removed auto-scroll)
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const [entry] = entries;
-        if (entry.isIntersecting && !isAutoLoading) {
-          console.log('Auto-load trigger element is visible, loading more content...');
-          setShowAutoLoadIndicator(true);
-          handleAutoLoad();
-        }
-      },
-      {
-        threshold: 0.1,
-        rootMargin: '100px'
-      }
-    );
-
-    observer.observe(autoLoadTriggerRef.current);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [autoLoadEnabled, isAutoLoading, researchData, query, researchPreferences]);
-
-  // Fallback scroll listener for older browsers
-  useEffect(() => {
-    const handleScroll = () => {
-      if (!autoLoadEnabled || isAutoLoading || !researchData) return;
-      
-      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-      const windowHeight = window.innerHeight;
-      const documentHeight = document.documentElement.scrollHeight;
-      
-      // Trigger when user is within 300px of the bottom
-      if (scrollTop + windowHeight >= documentHeight - 300) {
-        console.log('Fallback scroll trigger - loading more content...');
-        setShowAutoLoadIndicator(true);
-        handleAutoLoad();
-      }
-    };
-
-    // Add scroll listener with throttling
-    let ticking = false;
-    const throttledScroll = () => {
-      if (!ticking) {
-        requestAnimationFrame(() => {
-          handleScroll();
-          ticking = false;
-        });
-        ticking = true;
-      }
-    };
-
-    window.addEventListener('scroll', throttledScroll, { passive: true });
-    return () => window.removeEventListener('scroll', throttledScroll);
-  }, [autoLoadEnabled, isAutoLoading, researchData]);
+  // Manual generate more button handler
+  const handleGenerateMore = () => {
+    if (isAutoLoading || !researchData) return;
+    console.log('Generate More button clicked, loading additional content...');
+    setShowAutoLoadIndicator(true);
+    handleAutoLoad();
+  };
 
   const handleResearch = async () => {
     if (!query.trim()) return;
@@ -641,28 +591,29 @@ Please try again or check your OpenAI API key configuration.`);
                         value={researchPreferences.industry}
                         onChange={(e) => setResearchPreferences(prev => ({ ...prev, industry: e.target.value }))}
                         className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.1] rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/30 backdrop-blur-sm"
+                        style={{ colorScheme: 'dark' }}
                       >
-                        <option value="">Select Industry</option>
-                        <option value="Technology & Software">Technology & Software</option>
-                        <option value="Healthcare & Biotech">Healthcare & Biotech</option>
-                        <option value="Fintech & Financial Services">Fintech & Financial Services</option>
-                        <option value="E-commerce & Retail">E-commerce & Retail</option>
-                        <option value="Clean Energy & Sustainability">Clean Energy & Sustainability</option>
-                        <option value="Education & EdTech">Education & EdTech</option>
-                        <option value="Real Estate & PropTech">Real Estate & PropTech</option>
-                        <option value="Transportation & Mobility">Transportation & Mobility</option>
-                        <option value="Food & Agriculture">Food & Agriculture</option>
-                        <option value="Manufacturing & Industrial">Manufacturing & Industrial</option>
-                        <option value="Media & Entertainment">Media & Entertainment</option>
-                        <option value="Gaming & Esports">Gaming & Esports</option>
-                        <option value="Cybersecurity">Cybersecurity</option>
-                        <option value="AI & Machine Learning">AI & Machine Learning</option>
-                        <option value="Blockchain & Crypto">Blockchain & Crypto</option>
-                        <option value="SaaS & Cloud Services">SaaS & Cloud Services</option>
-                        <option value="Marketplace & Platforms">Marketplace & Platforms</option>
-                        <option value="Consumer Goods & Services">Consumer Goods & Services</option>
-                        <option value="B2B Services">B2B Services</option>
-                        <option value="Other">Other (Custom)</option>
+                        <option value="" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Select Industry</option>
+                        <option value="Technology & Software" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Technology & Software</option>
+                        <option value="Healthcare & Biotech" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Healthcare & Biotech</option>
+                        <option value="Fintech & Financial Services" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Fintech & Financial Services</option>
+                        <option value="E-commerce & Retail" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>E-commerce & Retail</option>
+                        <option value="Clean Energy & Sustainability" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Clean Energy & Sustainability</option>
+                        <option value="Education & EdTech" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Education & EdTech</option>
+                        <option value="Real Estate & PropTech" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Real Estate & PropTech</option>
+                        <option value="Transportation & Mobility" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Transportation & Mobility</option>
+                        <option value="Food & Agriculture" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Food & Agriculture</option>
+                        <option value="Manufacturing & Industrial" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Manufacturing & Industrial</option>
+                        <option value="Media & Entertainment" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Media & Entertainment</option>
+                        <option value="Gaming & Esports" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Gaming & Esports</option>
+                        <option value="Cybersecurity" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Cybersecurity</option>
+                        <option value="AI & Machine Learning" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>AI & Machine Learning</option>
+                        <option value="Blockchain & Crypto" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Blockchain & Crypto</option>
+                        <option value="SaaS & Cloud Services" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>SaaS & Cloud Services</option>
+                        <option value="Marketplace & Platforms" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Marketplace & Platforms</option>
+                        <option value="Consumer Goods & Services" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Consumer Goods & Services</option>
+                        <option value="B2B Services" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>B2B Services</option>
+                        <option value="Other" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Other (Custom)</option>
                       </select>
                     </div>
                     <div>
@@ -673,29 +624,30 @@ Please try again or check your OpenAI API key configuration.`);
                         value={researchPreferences.focus}
                         onChange={(e) => setResearchPreferences(prev => ({ ...prev, focus: e.target.value }))}
                         className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.1] rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/30 backdrop-blur-sm"
+                        style={{ colorScheme: 'dark' }}
                       >
-                        <option value="">Select Research Focus</option>
-                        <option value="Market Entry & Expansion">Market Entry & Expansion</option>
-                        <option value="Competitive Analysis">Competitive Analysis</option>
-                        <option value="Customer Segmentation">Customer Segmentation</option>
-                        <option value="Product-Market Fit">Product-Market Fit</option>
-                        <option value="Funding & Investment">Funding & Investment</option>
-                        <option value="Revenue Models & Pricing">Revenue Models & Pricing</option>
-                        <option value="Technology Trends">Technology Trends</option>
-                        <option value="Regulatory & Compliance">Regulatory & Compliance</option>
-                        <option value="Partnership Opportunities">Partnership Opportunities</option>
-                        <option value="Risk Assessment">Risk Assessment</option>
-                        <option value="Market Sizing & Growth">Market Sizing & Growth</option>
-                        <option value="Customer Acquisition">Customer Acquisition</option>
-                        <option value="Business Model Innovation">Business Model Innovation</option>
-                        <option value="International Expansion">International Expansion</option>
-                        <option value="M&A Opportunities">M&A Opportunities</option>
-                        <option value="Industry Benchmarking">Industry Benchmarking</option>
-                        <option value="Startup Ecosystem">Startup Ecosystem</option>
-                        <option value="Talent & Hiring">Talent & Hiring</option>
-                        <option value="Supply Chain Analysis">Supply Chain Analysis</option>
-                        <option value="Sustainability & ESG">Sustainability & ESG</option>
-                        <option value="Other">Other (Custom)</option>
+                        <option value="" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Select Research Focus</option>
+                        <option value="Market Entry & Expansion" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Market Entry & Expansion</option>
+                        <option value="Competitive Analysis" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Competitive Analysis</option>
+                        <option value="Customer Segmentation" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Customer Segmentation</option>
+                        <option value="Product-Market Fit" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Product-Market Fit</option>
+                        <option value="Funding & Investment" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Funding & Investment</option>
+                        <option value="Revenue Models & Pricing" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Revenue Models & Pricing</option>
+                        <option value="Technology Trends" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Technology Trends</option>
+                        <option value="Regulatory & Compliance" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Regulatory & Compliance</option>
+                        <option value="Partnership Opportunities" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Partnership Opportunities</option>
+                        <option value="Risk Assessment" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Risk Assessment</option>
+                        <option value="Market Sizing & Growth" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Market Sizing & Growth</option>
+                        <option value="Customer Acquisition" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Customer Acquisition</option>
+                        <option value="Business Model Innovation" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Business Model Innovation</option>
+                        <option value="International Expansion" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>International Expansion</option>
+                        <option value="M&A Opportunities" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>M&A Opportunities</option>
+                        <option value="Industry Benchmarking" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Industry Benchmarking</option>
+                        <option value="Startup Ecosystem" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Startup Ecosystem</option>
+                        <option value="Talent & Hiring" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Talent & Hiring</option>
+                        <option value="Supply Chain Analysis" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Supply Chain Analysis</option>
+                        <option value="Sustainability & ESG" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Sustainability & ESG</option>
+                        <option value="Other" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Other (Custom)</option>
                       </select>
                     </div>
                     <div>
@@ -706,10 +658,11 @@ Please try again or check your OpenAI API key configuration.`);
                         value={researchPreferences.depth}
                         onChange={(e) => setResearchPreferences(prev => ({ ...prev, depth: e.target.value }))}
                         className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.1] rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/30 backdrop-blur-sm"
+                        style={{ colorScheme: 'dark' }}
                       >
-                        <option value="comprehensive">Comprehensive</option>
-                        <option value="detailed">Detailed</option>
-                        <option value="overview">Overview</option>
+                        <option value="comprehensive" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Comprehensive</option>
+                        <option value="detailed" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Detailed</option>
+                        <option value="overview" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Overview</option>
                       </select>
                     </div>
                     <div>
@@ -720,9 +673,10 @@ Please try again or check your OpenAI API key configuration.`);
                         value={researchPreferences.preserveTables ? 'tables' : 'summary'}
                         onChange={(e) => setResearchPreferences(prev => ({ ...prev, preserveTables: e.target.value === 'tables' }))}
                         className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.1] rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/30 backdrop-blur-sm"
+                        style={{ colorScheme: 'dark' }}
                       >
-                        <option value="tables">Detailed Tables</option>
-                        <option value="summary">Summarized</option>
+                        <option value="tables" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Detailed Tables</option>
+                        <option value="summary" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Summarized</option>
                       </select>
                     </div>
                   </div>
@@ -1070,111 +1024,28 @@ OPENAI_API_KEY=your_actual_api_key_here
                   </motion.div>
                 )}
 
-                {/* Auto-load trigger element */}
+                {/* Generate More Button */}
                 {showResults && researchResults && !researchResults.includes('Research Failed') && (
-                  <div 
-                    ref={autoLoadTriggerRef}
-                    className="h-20 flex items-center justify-center"
-                  >
-                    {isAutoLoading && (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="flex items-center gap-3 px-6 py-3 bg-blue-500/20 border border-blue-500/30 rounded-full"
-                      >
-                        <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-                        <span className="text-blue-300 text-sm font-medium">
-                          Loading more research...
-                        </span>
-                      </motion.div>
-                    )}
+                  <div className="flex justify-center mt-8">
+                    <Button
+                      onClick={handleGenerateMore}
+                      disabled={isAutoLoading}
+                      className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white border-0 rounded-xl transition-all duration-300 hover:shadow-[0_0_25px_rgba(59,130,246,0.4)] font-semibold px-8 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isAutoLoading ? (
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>Generating More...</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span>🔍 Generate More Research</span>
+                        </div>
+                      )}
+                    </Button>
                   </div>
                 )}
 
-                {/* Auto-load indicator */}
-                {!researchResults.includes('Research Failed') && researchData && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mt-8 relative z-20"
-                  >
-                    <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-6 backdrop-blur-sm relative z-10">
-                      <div className="text-center">
-                        {isAutoLoading ? (
-                          <div className="flex flex-col items-center justify-center gap-4">
-                            <div className="flex items-center gap-3">
-                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-400"></div>
-                              <span className="text-white/80 font-medium">Auto-loading detailed research...</span>
-                            </div>
-                            <div className="text-white/60 text-xs text-center space-y-1">
-                              <p className="text-blue-300">🔍 Generating comprehensive market analysis</p>
-                              <p className="text-green-300">📰 Summarizing 10+ relevant articles</p>
-                              <p className="text-purple-300">🎥 Analyzing YouTube content</p>
-                              <p className="text-yellow-300">📊 Creating detailed data tables</p>
-                              <p className="text-orange-300">💡 Compiling strategic recommendations</p>
-                            </div>
-                            <div className="w-full max-w-xs bg-white/10 rounded-full h-2">
-                              <div className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full animate-pulse" style={{width: '60%'}}></div>
-                            </div>
-                          </div>
-                        ) : autoLoadError ? (
-                          <div className="flex flex-col items-center justify-center gap-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-6 h-6 rounded-full bg-red-500/20 flex items-center justify-center">
-                                <span className="text-red-400 text-sm">⚠️</span>
-                              </div>
-                              <span className="text-red-300 font-medium">Auto-load failed</span>
-                            </div>
-                            <div className="text-red-200/80 text-xs text-center max-w-md">
-                              <p className="mb-2">{autoLoadError}</p>
-                              {retryCount > 0 && (
-                                <p className="text-yellow-300">Retry attempt: {retryCount}/3</p>
-                              )}
-                            </div>
-                            <div className="flex gap-2">
-                              <button 
-                                onClick={retryAutoLoad}
-                                disabled={retryCount >= 3}
-                                className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-lg text-red-300 hover:text-red-200 text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                🔄 Retry ({3 - retryCount} left)
-                              </button>
-                              <button 
-                                onClick={() => setAutoLoadError(null)}
-                                className="px-4 py-2 bg-gray-500/20 hover:bg-gray-500/30 border border-gray-500/30 rounded-lg text-gray-300 hover:text-gray-200 text-xs transition-colors"
-                              >
-                                ✕ Dismiss
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-white/60 text-sm">
-                            <p className="text-white/80 font-medium mb-2">📜 Auto-Load More Research</p>
-                            {autoLoadCount > 0 && (
-                              <p className="text-xs text-green-400/80 mb-2">✅ {autoLoadCount} additional research load{autoLoadCount > 1 ? 's' : ''} completed</p>
-                            )}
-                            <p className="text-xs mb-2">Scroll to bottom to trigger detailed additional research including:</p>
-                            <ul className="text-xs text-white/50 mb-3 text-left">
-                              <li>• Comprehensive market analysis (15+ companies)</li>
-                              <li>• 10+ detailed article summaries</li>
-                              <li>• Recent funding & financial data</li>
-                              <li>• Regulatory & compliance updates</li>
-                              <li>• Technology & innovation trends</li>
-                              <li>• Detailed case studies & recommendations</li>
-                            </ul>
-                            <p className="text-xs text-yellow-400/80 mb-2">⏱️ Rate limited to 1 request per minute</p>
-                            <button 
-                              onClick={handleAutoLoad}
-                              className="mt-2 px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 rounded-lg text-blue-300 hover:text-blue-200 text-xs transition-colors"
-                            >
-                              🔄 Load More Research Now
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
 
               </div>
             </div>
