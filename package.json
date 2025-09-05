@@ -2,6 +2,10 @@
   "name": "youtube-summary",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=18.17.0",
+    "npm": ">=9.0.0"
+  },
   "scripts": {
     "dev": "next dev --turbopack",
     "build:company-index": "node scripts/build-company-index.mjs",
@@ -25,12 +29,12 @@
     "groq": "^4.5.0",
     "groq-sdk": "^0.30.0",
     "lucide-react": "^0.540.0",
-    "next": "15.4.7",
+    "next": "^15.4.7",
     "next-auth": "^4.24.11",
     "node-fetch": "^3.3.2",
     "openai": "^5.12.2",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "react-markdown": "^10.1.0",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
