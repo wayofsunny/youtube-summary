@@ -4,8 +4,9 @@ import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Bot, Lightbulb, Target, TrendingUp, Users, Building2, Zap, Copy } from "lucide-react";
+import { Search, Bot, Lightbulb, Target, TrendingUp, Users, Building2, Zap, Copy, Table } from "lucide-react";
 import { ExpandableDocsSidebar } from "@/components/ui/expandable-docs-sidebar";
+import { ResearchQuestionsModal } from "@/components/ui/research-questions-modal";
 
 function ElegantShape({
     className,
@@ -88,8 +89,26 @@ export default function AIResearcherAgent() {
   const [autoLoadError, setAutoLoadError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [copiedParagraphs, setCopiedParagraphs] = useState<Set<number>>(new Set());
+  const [structuredParagraphs, setStructuredParagraphs] = useState<Set<number>>(new Set());
+  const [showResearchModal, setShowResearchModal] = useState(false);
+  
+  // Debug modal state changes
+  useEffect(() => {
+    console.log('Research modal state changed:', showResearchModal);
+  }, [showResearchModal]);
   const resultsRef = useRef<HTMLDivElement>(null);
   const autoLoadTriggerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-open research modal when component mounts
+  useEffect(() => {
+    console.log('Component mounted, setting up auto-open timer');
+    const timer = setTimeout(() => {
+      console.log('Auto-opening research modal');
+      setShowResearchModal(true);
+    }, 1000); // Increased delay to ensure component is fully mounted
+    
+    return () => clearTimeout(timer);
+  }, []);
 
   // Auto-load more content when user scrolls to bottom
   const handleAutoLoad = async () => {
@@ -168,7 +187,7 @@ Focus on providing EXTREMELY DETAILED, DATA-RICH insights with specific numbers,
           isAdditionalResearch: true,
           originalQuery: query,
           generateArticleSummaries: true,
-          numSummaries: 10, // Generate 10 detailed article summaries
+          numSummaries: 12, // Generate 12 detailed article summaries
           preserveTables: researchPreferences.preserveTables
         }),
       });
@@ -249,6 +268,89 @@ Focus on providing EXTREMELY DETAILED, DATA-RICH insights with specific numbers,
     setAutoLoadError(null);
     setRetryCount(0);
     await handleAutoLoad();
+  };
+
+  // Research modal handlers
+  const handleResearchModalComplete = (preferences: any) => {
+    console.log("Research preferences completed:", preferences);
+    setShowResearchModal(false);
+    // You can use these preferences to enhance the research query
+  };
+
+  const handleResearchModalClose = () => {
+    setShowResearchModal(false);
+  };
+
+  // Function to detect and convert semi-tabular data to proper structure
+  const convertToStructuredTable = (paragraphText: string, paragraphIndex: number) => {
+    // Detect semi-tabular patterns
+    const lines = paragraphText.split('\n').filter(line => line.trim());
+    const hasTablePatterns = lines.some(line => 
+      line.includes('|') || 
+      line.includes('Company') && line.includes('Revenue') ||
+      line.includes('Market') && line.includes('Growth') ||
+      line.includes('Funding') && line.includes('Amount') ||
+      line.includes('TAM') || line.includes('SAM') || line.includes('SOM') ||
+      line.match(/\d+%/) || line.match(/\$\d+/) ||
+      line.includes('•') && line.includes(':') ||
+      line.match(/^\s*[A-Z][a-z]+.*:.*\d/) // Pattern like "Company: Value"
+    );
+
+    if (!hasTablePatterns) {
+      alert('No semi-tabular data detected in this paragraph.');
+      return;
+    }
+
+    // Convert to structured table format
+    let structuredData = '';
+    
+    // Try to detect different patterns and convert them
+    if (paragraphText.includes('|')) {
+      // Already has some table structure, clean it up
+      structuredData = paragraphText.replace(/\|+/g, '|').replace(/\|\s*\|/g, '|');
+    } else {
+      // Convert bullet points or other patterns to table format
+      const convertedLines = lines.map(line => {
+        // Handle patterns like "Company: Value" or "Company - Value"
+        if (line.includes(':') || line.includes(' - ')) {
+          const parts = line.split(/[:|]| - /);
+          if (parts.length >= 2) {
+            return parts.map(part => part.trim()).join(' | ');
+          }
+        }
+        // Handle bullet points with data
+        if (line.includes('•') && line.includes(':')) {
+          return line.replace('•', '').replace(':', ' | ').trim();
+        }
+        return line;
+      });
+      
+      structuredData = convertedLines.join('\n');
+    }
+
+    // Add table headers if missing
+    if (!structuredData.includes('Company') && !structuredData.includes('Metric')) {
+      const firstLine = structuredData.split('\n')[0];
+      if (firstLine && !firstLine.includes('|')) {
+        // Add basic headers
+        structuredData = 'Metric | Value | Details\n' + structuredData;
+      }
+    }
+
+    // Copy to clipboard
+    navigator.clipboard.writeText(structuredData).then(() => {
+      setStructuredParagraphs(prev => new Set([...prev, paragraphIndex]));
+      setTimeout(() => {
+        setStructuredParagraphs(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(paragraphIndex);
+          return newSet;
+        });
+      }, 2000);
+    }).catch(err => {
+      console.error('Failed to copy structured data:', err);
+      alert('Failed to copy structured data to clipboard.');
+    });
   };
 
   // Function to copy paragraph to notepad
@@ -365,7 +467,7 @@ Focus on providing EXTREMELY DETAILED, DATA-RICH insights with specific numbers,
           query: enhancedQuery,
           preferences: researchPreferences,
           generateArticleSummaries: true,
-          numSummaries: 5, // Generate 5 article summaries for initial research
+          numSummaries: 8, // Generate 8 article summaries for initial research
           preserveTables: researchPreferences.preserveTables
         }),
       });
@@ -454,7 +556,7 @@ Please try again or check your OpenAI API key configuration.`);
       {/* Background gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/[0.05] via-transparent to-rose-500/[0.05] blur-3xl" />
 
-      <div className="relative z-10 flex min-h-screen">
+      <div className="relative z-10 flex min-h-screen max-w-full">
         {/* Left Sidebar - Expandable Docs Sidebar */}
         <div className="w-80 flex-shrink-0">
           <ExpandableDocsSidebar 
@@ -463,7 +565,7 @@ Please try again or check your OpenAI API key configuration.`);
         </div>
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-w-0 max-w-full">
           {/* Header */}
           <div className="p-8 pb-4">
             <h1 className="text-4xl md:text-5xl font-extrabold text-center bg-clip-text text-transparent bg-gradient-to-r from-white via-blue-100 to-purple-100 drop-shadow-[0_0_20px_rgba(255,255,255,0.3)] flex items-center justify-center gap-3">
@@ -476,8 +578,8 @@ Please try again or check your OpenAI API key configuration.`);
           </div>
 
           {/* Page Content */}
-          <div className="flex-1 px-8 pb-8 overflow-hidden">
-            <div className="bg-white/5 rounded-2xl p-6 text-gray-200 relative min-h-0">
+          <div className="flex-1 px-8 pb-8 overflow-x-hidden overflow-y-auto min-w-0">
+            <div className="bg-white/5 rounded-2xl p-6 text-gray-200 relative min-h-0 w-full max-w-full">
               {/* Floating geometric shapes */}
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <ElegantShape
@@ -535,25 +637,66 @@ Please try again or check your OpenAI API key configuration.`);
                       <label className="block text-sm font-medium text-white/80 mb-2">
                         Industry Focus
                       </label>
-                      <Input
-                        type="text"
+                      <select
                         value={researchPreferences.industry}
                         onChange={(e) => setResearchPreferences(prev => ({ ...prev, industry: e.target.value }))}
-                        placeholder="e.g., Technology, Healthcare"
-                        className="w-full bg-white/[0.05] border-white/[0.1] text-white placeholder:text-white/40 focus:border-white/30 focus:ring-white/20 rounded-xl backdrop-blur-sm"
-                      />
+                        className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.1] rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/30 backdrop-blur-sm"
+                      >
+                        <option value="">Select Industry</option>
+                        <option value="Technology & Software">Technology & Software</option>
+                        <option value="Healthcare & Biotech">Healthcare & Biotech</option>
+                        <option value="Fintech & Financial Services">Fintech & Financial Services</option>
+                        <option value="E-commerce & Retail">E-commerce & Retail</option>
+                        <option value="Clean Energy & Sustainability">Clean Energy & Sustainability</option>
+                        <option value="Education & EdTech">Education & EdTech</option>
+                        <option value="Real Estate & PropTech">Real Estate & PropTech</option>
+                        <option value="Transportation & Mobility">Transportation & Mobility</option>
+                        <option value="Food & Agriculture">Food & Agriculture</option>
+                        <option value="Manufacturing & Industrial">Manufacturing & Industrial</option>
+                        <option value="Media & Entertainment">Media & Entertainment</option>
+                        <option value="Gaming & Esports">Gaming & Esports</option>
+                        <option value="Cybersecurity">Cybersecurity</option>
+                        <option value="AI & Machine Learning">AI & Machine Learning</option>
+                        <option value="Blockchain & Crypto">Blockchain & Crypto</option>
+                        <option value="SaaS & Cloud Services">SaaS & Cloud Services</option>
+                        <option value="Marketplace & Platforms">Marketplace & Platforms</option>
+                        <option value="Consumer Goods & Services">Consumer Goods & Services</option>
+                        <option value="B2B Services">B2B Services</option>
+                        <option value="Other">Other (Custom)</option>
+                      </select>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-white/80 mb-2">
                         Research Focus
                       </label>
-                      <Input
-                        type="text"
+                      <select
                         value={researchPreferences.focus}
                         onChange={(e) => setResearchPreferences(prev => ({ ...prev, focus: e.target.value }))}
-                        placeholder="e.g., Market Entry, Competition"
-                        className="w-full bg-white/[0.05] border-white/[0.1] text-white placeholder:text-white/40 focus:border-white/30 focus:ring-white/20 rounded-xl backdrop-blur-sm"
-                      />
+                        className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.1] rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/30 backdrop-blur-sm"
+                      >
+                        <option value="">Select Research Focus</option>
+                        <option value="Market Entry & Expansion">Market Entry & Expansion</option>
+                        <option value="Competitive Analysis">Competitive Analysis</option>
+                        <option value="Customer Segmentation">Customer Segmentation</option>
+                        <option value="Product-Market Fit">Product-Market Fit</option>
+                        <option value="Funding & Investment">Funding & Investment</option>
+                        <option value="Revenue Models & Pricing">Revenue Models & Pricing</option>
+                        <option value="Technology Trends">Technology Trends</option>
+                        <option value="Regulatory & Compliance">Regulatory & Compliance</option>
+                        <option value="Partnership Opportunities">Partnership Opportunities</option>
+                        <option value="Risk Assessment">Risk Assessment</option>
+                        <option value="Market Sizing & Growth">Market Sizing & Growth</option>
+                        <option value="Customer Acquisition">Customer Acquisition</option>
+                        <option value="Business Model Innovation">Business Model Innovation</option>
+                        <option value="International Expansion">International Expansion</option>
+                        <option value="M&A Opportunities">M&A Opportunities</option>
+                        <option value="Industry Benchmarking">Industry Benchmarking</option>
+                        <option value="Startup Ecosystem">Startup Ecosystem</option>
+                        <option value="Talent & Hiring">Talent & Hiring</option>
+                        <option value="Supply Chain Analysis">Supply Chain Analysis</option>
+                        <option value="Sustainability & ESG">Sustainability & ESG</option>
+                        <option value="Other">Other (Custom)</option>
+                      </select>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-white/80 mb-2">
@@ -615,6 +758,13 @@ Please try again or check your OpenAI API key configuration.`);
                   >
                     {loading ? "🔍 Researching..." : "Generate Research Report"}
                   </Button>
+                  <Button
+                    className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white border-0 rounded-xl transition-all duration-300 hover:shadow-[0_0_25px_rgba(34,197,94,0.4)] font-semibold px-6"
+                    onClick={() => setShowResearchModal(true)}
+                    disabled={loading}
+                  >
+                    🎯 Research Preferences
+                  </Button>
                 </motion.div>
 
                 {/* Quick Prompts */}
@@ -667,10 +817,10 @@ Please try again or check your OpenAI API key configuration.`);
                     ref={resultsRef}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="space-y-6 mt-8"
+                    className="space-y-6 mt-8 w-full max-w-full"
                   >
                     {/* Section 1: AI Research Analysis */}
-                    <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-6 backdrop-blur-sm relative z-20">
+                    <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-6 backdrop-blur-sm relative z-20 w-full max-w-full overflow-hidden">
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-xl font-semibold text-white flex items-center gap-2">
                           <Bot className="w-5 h-5 text-indigo-400" />
@@ -701,35 +851,54 @@ Please try again or check your OpenAI API key configuration.`);
                             {researchResults}
                           </pre>
                         ) : (
-                          <div className="bg-white/[0.02] p-4 rounded-lg border border-white/[0.05] max-h-[70vh] overflow-y-auto">
+                          <div className="bg-white/[0.02] p-4 rounded-lg border border-white/[0.05] max-h-[50vh] overflow-y-auto w-full max-w-full">
                             {researchResults.split('\n\n').map((paragraph, index) => {
                               if (!paragraph.trim()) return null;
                               const isCopied = copiedParagraphs.has(index);
                               return (
-                                <div key={index} className="relative group mb-4 last:mb-0">
-                                  <div className="flex items-start gap-3">
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-white/80 text-sm leading-relaxed whitespace-pre-wrap break-words">
+                                <div key={index} className="relative group mb-4 last:mb-0 w-full">
+                                  <div className="flex items-start gap-3 w-full">
+                                    <div className="flex-1 min-w-0 max-w-full">
+                                      <p className="text-white/80 text-sm leading-relaxed whitespace-pre-wrap break-words overflow-wrap-anywhere">
                                         {paragraph}
                                       </p>
                                     </div>
-                                    <button
-                                      onClick={() => copyParagraphToNotepad(paragraph, index)}
-                                      className={`opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 rounded-lg flex-shrink-0 ${
-                                        isCopied 
-                                          ? 'bg-green-500/20 text-green-300' 
-                                          : 'bg-white/[0.08] hover:bg-white/[0.15] text-white/60 hover:text-white'
-                                      }`}
-                                      title={isCopied ? "Copied to notepad!" : "Copy paragraph to notepad"}
-                                    >
-                                      {isCopied ? (
-                                        <div className="w-4 h-4 flex items-center justify-center">
-                                          <span className="text-green-400 text-xs">✓</span>
-                                        </div>
-                                      ) : (
-                                        <Copy className="w-4 h-4" />
-                                      )}
-                                    </button>
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={() => convertToStructuredTable(paragraph, index)}
+                                        className={`opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 rounded-lg flex-shrink-0 ${
+                                          structuredParagraphs.has(index)
+                                            ? 'bg-blue-500/20 text-blue-300' 
+                                            : 'bg-white/[0.08] hover:bg-white/[0.15] text-white/60 hover:text-white'
+                                        }`}
+                                        title={structuredParagraphs.has(index) ? "Structured data copied!" : "Convert to structured table"}
+                                      >
+                                        {structuredParagraphs.has(index) ? (
+                                          <div className="w-4 h-4 flex items-center justify-center">
+                                            <span className="text-blue-400 text-xs">✓</span>
+                                          </div>
+                                        ) : (
+                                          <Table className="w-4 h-4" />
+                                        )}
+                                      </button>
+                                      <button
+                                        onClick={() => copyParagraphToNotepad(paragraph, index)}
+                                        className={`opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 rounded-lg flex-shrink-0 ${
+                                          isCopied 
+                                            ? 'bg-green-500/20 text-green-300' 
+                                            : 'bg-white/[0.08] hover:bg-white/[0.15] text-white/60 hover:text-white'
+                                        }`}
+                                        title={isCopied ? "Copied to notepad!" : "Copy paragraph to notepad"}
+                                      >
+                                        {isCopied ? (
+                                          <div className="w-4 h-4 flex items-center justify-center">
+                                            <span className="text-green-400 text-xs">✓</span>
+                                          </div>
+                                        ) : (
+                                          <Copy className="w-4 h-4" />
+                                        )}
+                                      </button>
+                                    </div>
                                   </div>
                                 </div>
                               );
@@ -750,25 +919,25 @@ OPENAI_API_KEY=your_actual_api_key_here
                       )}
                     </div>
 
-                    {/* 2x2 Grid Layout for All Sections */}
+                    {/* Vertical Stack Layout for All Sections */}
                     {!researchResults.includes('Research Failed') && (
                       <motion.div 
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.4, duration: 0.6 }}
-                        className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8 relative z-20"
+                        className="space-y-12 mt-8 relative z-20 w-full max-w-full"
                       >
                         {/* Section 2: YouTube Video Analysis */}
                         {researchData?.youtubeVideos && researchData.youtubeVideos.length > 0 && (
-                          <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-4 md:p-6 backdrop-blur-sm h-fit">
+                          <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-4 md:p-6 backdrop-blur-sm h-fit w-full max-w-full overflow-hidden">
                             <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                              📺 YouTube Video Analysis & Summaries (Sorted by View Count)
+                              📺 YouTube Video Analysis & Summaries
                             </h3>
-                            <div className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-full">
                               {researchData.youtubeVideos
                                 .sort((a: any, b: any) => (b.viewCount || 0) - (a.viewCount || 0))
                                 .map((video: any, index: number) => (
-                                <div key={video.id || index} className="p-4 bg-white/[0.02] border border-white/[0.05] rounded-xl">
+                                <div key={video.id || index} className="p-4 bg-white/[0.02] border border-white/[0.05] rounded-xl w-full max-w-full overflow-hidden">
                                   <div className="flex items-start gap-4">
                                     {video.thumbnail && (
                                       <img 
@@ -805,13 +974,13 @@ OPENAI_API_KEY=your_actual_api_key_here
 
                         {/* Section 3: News Article Analysis */}
                         {researchData?.newsArticles && researchData.newsArticles.length > 0 && (
-                          <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-4 md:p-6 backdrop-blur-sm h-fit">
+                          <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-4 md:p-6 backdrop-blur-sm h-fit w-full max-w-full overflow-hidden">
                             <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
                               📰 News Article Analysis & Insights
                             </h3>
-                            <div className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-full">
                               {researchData.newsArticles.map((article: any, index: number) => (
-                                <div key={index} className="p-4 bg-white/[0.02] border border-white/[0.05] rounded-xl">
+                                <div key={index} className="p-4 bg-white/[0.02] border border-white/[0.05] rounded-xl w-full max-w-full overflow-hidden">
                                   <h4 className="font-semibold text-white mb-2 line-clamp-2">
                                     {article.title}
                                   </h4>
@@ -837,7 +1006,7 @@ OPENAI_API_KEY=your_actual_api_key_here
 
                         {/* Section 4: Additional Web-Searched Data */}
                         {additionalResearchData?.additionalWebData && additionalResearchData.additionalWebData.length > 0 && (
-                          <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-4 md:p-6 backdrop-blur-sm h-fit">
+                          <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-4 md:p-6 backdrop-blur-sm h-fit w-full max-w-full overflow-hidden">
                             <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
                               🌐 Additional Web-Searched Insights
                             </h3>
@@ -846,9 +1015,9 @@ OPENAI_API_KEY=your_actual_api_key_here
                                 💡 <strong>Fresh Data:</strong> These insights were fetched from recent web searches to provide additional perspectives and up-to-date information.
                               </p>
                             </div>
-                            <div className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-full">
                               {additionalResearchData.additionalWebData.map((article: any, index: number) => (
-                                <div key={index} className="p-4 bg-white/[0.02] border border-white/[0.05] rounded-xl">
+                                <div key={index} className="p-4 bg-white/[0.02] border border-white/[0.05] rounded-xl w-full max-w-full overflow-hidden">
                                   <div className="flex items-center gap-2 mb-2">
                                     <span className="px-2 py-1 bg-blue-500/20 text-blue-300 text-xs rounded-full">
                                       Web-Searched
@@ -880,25 +1049,6 @@ OPENAI_API_KEY=your_actual_api_key_here
                           </div>
                         )}
 
-                        {/* Section 5: Placeholder for future content or additional insights */}
-                        <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-4 md:p-6 backdrop-blur-sm h-fit">
-                          <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                            📊 Additional Insights
-                          </h3>
-                          <div className="space-y-4">
-                            <div className="p-4 bg-white/[0.02] border border-white/[0.05] rounded-xl">
-                              <h4 className="font-semibold text-white mb-2">
-                                🔍 Research Summary
-                              </h4>
-                              <p className="text-sm text-white/80 leading-relaxed mb-3">
-                                This section can be used for additional research insights, market trends, or supplementary data that complements the main analysis.
-                              </p>
-                              <div className="text-xs text-white/60">
-                                Auto-generated content will appear here as more research is conducted.
-                              </div>
-                            </div>
-                          </div>
-                        </div>
                       </motion.div>
                     )}
 
@@ -1031,6 +1181,13 @@ OPENAI_API_KEY=your_actual_api_key_here
           </div>
         </div>
       </div>
+
+      {/* Research Questions Modal */}
+      <ResearchQuestionsModal
+        isOpen={showResearchModal}
+        onClose={handleResearchModalClose}
+        onComplete={handleResearchModalComplete}
+      />
     </div>
   );
 }

@@ -536,12 +536,12 @@ export async function POST(req: Request) {
     if (action === 'search' && query) {
     console.log(`🚀 Starting YouTube search for query: "${query}"${pageToken ? ` (Page: ${pageToken})` : ''}`);
 
-      // ✅ 1. Fetch Top 10 YouTube Videos
+      // ✅ 1. Fetch Top 20 YouTube Videos
     const searchRes = await youtube.search.list({
       key: process.env.YOUTUBE_API_KEY,
       part: ["snippet"],
       q: query,
-        maxResults: 10,
+        maxResults: 20,
       type: ["video"],
         pageToken: pageToken || undefined,
     });
@@ -591,7 +591,7 @@ export async function POST(req: Request) {
       }))
       .filter((v: VideoWithDetails) => v.durationSec >= 60) // Remove Shorts
         .sort((a: VideoWithDetails, b: VideoWithDetails) => b.viewCount - a.viewCount) // Sort by views
-        .slice(0, 8); // Top 8 non-Shorts
+        .slice(0, 12); // Top 12 non-Shorts
 
     if (!videos.length) {
       console.log("❌ No regular videos found after filtering Shorts");

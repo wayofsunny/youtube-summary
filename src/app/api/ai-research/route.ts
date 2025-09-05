@@ -188,6 +188,118 @@ export async function POST(request: NextRequest) {
     }
 
     const { query, isAdditionalResearch, originalQuery, generateArticleSummaries, numSummaries = 5, preserveTables = true } = await request.json();
+    
+    // Extract research preferences from query
+    let researchDepth = 'comprehensive'; // default
+    let industryFocus = '';
+    let researchFocus = '';
+    
+    const depthMatch = query.match(/- Depth: (detailed|comprehensive|overview)/);
+    if (depthMatch) {
+      researchDepth = depthMatch[1];
+    }
+    
+    const industryMatch = query.match(/- Industry: ([^\n]+)/);
+    if (industryMatch) {
+      industryFocus = industryMatch[1].trim();
+    }
+    
+    const focusMatch = query.match(/- Focus: ([^\n]+)/);
+    if (focusMatch) {
+      researchFocus = focusMatch[1].trim();
+    }
+
+    // Generate depth-specific instructions
+    const getDepthInstructions = (depth: string) => {
+      switch (depth) {
+        case 'detailed':
+          return {
+            tableCount: '30+ companies per table',
+            analysisLevel: 'DEEP DIVE analysis with extensive data points, metrics, and granular insights',
+            tokenLimit: 16000,
+            temperature: 0.6
+          };
+        case 'comprehensive':
+          return {
+            tableCount: '25+ companies per table',
+            analysisLevel: 'COMPREHENSIVE analysis with balanced depth and breadth',
+            tokenLimit: 12000,
+            temperature: 0.7
+          };
+        case 'overview':
+          return {
+            tableCount: '15+ companies per table',
+            analysisLevel: 'HIGH-LEVEL overview with key insights and essential data points',
+            tokenLimit: 8000,
+            temperature: 0.8
+          };
+        default:
+          return {
+            tableCount: '25+ companies per table',
+            analysisLevel: 'COMPREHENSIVE analysis with balanced depth and breadth',
+            tokenLimit: 12000,
+            temperature: 0.7
+          };
+      }
+    };
+
+    const depthConfig = getDepthInstructions(researchDepth);
+
+    // Generate industry-specific instructions
+    const getIndustryInstructions = (industry: string) => {
+      const industryMap: { [key: string]: string } = {
+        'Technology & Software': 'Focus on software companies, SaaS metrics, technology adoption rates, and digital transformation trends',
+        'Healthcare & Biotech': 'Emphasize regulatory compliance, clinical trials, FDA approvals, and healthcare market dynamics',
+        'Fintech & Financial Services': 'Prioritize financial regulations, payment systems, banking partnerships, and fintech innovation',
+        'E-commerce & Retail': 'Focus on consumer behavior, supply chain, logistics, and retail technology trends',
+        'Clean Energy & Sustainability': 'Emphasize environmental regulations, renewable energy adoption, and sustainability metrics',
+        'Education & EdTech': 'Focus on learning outcomes, educational technology adoption, and institutional partnerships',
+        'Real Estate & PropTech': 'Prioritize property markets, real estate technology, and urban development trends',
+        'Transportation & Mobility': 'Focus on mobility solutions, transportation infrastructure, and urban planning',
+        'Food & Agriculture': 'Emphasize food safety, agricultural technology, and supply chain sustainability',
+        'Manufacturing & Industrial': 'Focus on industrial automation, supply chain optimization, and manufacturing efficiency',
+        'Media & Entertainment': 'Prioritize content creation, media consumption trends, and entertainment technology',
+        'Gaming & Esports': 'Focus on gaming industry metrics, esports growth, and gaming technology trends',
+        'Cybersecurity': 'Emphasize security threats, compliance requirements, and cybersecurity solutions',
+        'AI & Machine Learning': 'Focus on AI adoption, machine learning applications, and AI market trends',
+        'Blockchain & Crypto': 'Prioritize blockchain technology, cryptocurrency markets, and decentralized finance',
+        'SaaS & Cloud Services': 'Focus on cloud adoption, SaaS metrics, and software-as-a-service trends',
+        'Marketplace & Platforms': 'Emphasize platform economics, network effects, and marketplace dynamics',
+        'Consumer Goods & Services': 'Focus on consumer trends, brand analysis, and retail market dynamics',
+        'B2B Services': 'Prioritize enterprise solutions, B2B sales cycles, and business service trends'
+      };
+      return industryMap[industry] || 'Provide comprehensive industry analysis with relevant market insights';
+    };
+
+    // Generate focus-specific instructions
+    const getFocusInstructions = (focus: string) => {
+      const focusMap: { [key: string]: string } = {
+        'Market Entry & Expansion': 'Focus on market entry strategies, expansion opportunities, and market penetration tactics',
+        'Competitive Analysis': 'Emphasize competitor analysis, market positioning, and competitive advantages',
+        'Customer Segmentation': 'Prioritize customer analysis, market segmentation, and customer behavior insights',
+        'Product-Market Fit': 'Focus on product validation, market fit indicators, and product development insights',
+        'Funding & Investment': 'Emphasize funding trends, investment opportunities, and financial analysis',
+        'Revenue Models & Pricing': 'Focus on revenue strategies, pricing models, and monetization approaches',
+        'Technology Trends': 'Prioritize technology adoption, innovation trends, and technical market analysis',
+        'Regulatory & Compliance': 'Emphasize regulatory requirements, compliance costs, and legal considerations',
+        'Partnership Opportunities': 'Focus on strategic partnerships, collaboration opportunities, and alliance strategies',
+        'Risk Assessment': 'Prioritize risk analysis, threat assessment, and mitigation strategies',
+        'Market Sizing & Growth': 'Focus on market size analysis, growth projections, and market opportunity assessment',
+        'Customer Acquisition': 'Emphasize customer acquisition strategies, marketing channels, and growth tactics',
+        'Business Model Innovation': 'Focus on business model analysis, innovation opportunities, and model optimization',
+        'International Expansion': 'Prioritize global market analysis, expansion strategies, and international considerations',
+        'M&A Opportunities': 'Focus on merger and acquisition opportunities, deal analysis, and consolidation trends',
+        'Industry Benchmarking': 'Emphasize industry comparisons, performance benchmarks, and best practices',
+        'Startup Ecosystem': 'Focus on startup landscape, ecosystem dynamics, and entrepreneurial trends',
+        'Talent & Hiring': 'Prioritize talent analysis, hiring trends, and workforce development',
+        'Supply Chain Analysis': 'Focus on supply chain optimization, logistics, and operational efficiency',
+        'Sustainability & ESG': 'Emphasize environmental impact, sustainability metrics, and ESG considerations'
+      };
+      return focusMap[focus] || 'Provide comprehensive analysis with actionable insights';
+    };
+
+    const industryInstructions = industryFocus ? getIndustryInstructions(industryFocus) : '';
+    const focusInstructions = researchFocus ? getFocusInstructions(researchFocus) : '';
 
     // Validate input
     if (!query || typeof query !== 'string' || query.trim().length === 0) {
@@ -219,6 +331,11 @@ export async function POST(request: NextRequest) {
    
     const systemPrompt = isAdditionalResearch
     ? `You are an AI Research Agent for a Startup Founder Assistant, now conducting ADDITIONAL RESEARCH to complement previous findings. Your PRIMARY JOB is to generate COMPREHENSIVE TABULAR DATA.
+    
+    RESEARCH DEPTH: ${depthConfig.analysisLevel}
+    TABLE REQUIREMENTS: ${depthConfig.tableCount}
+    ${industryFocus ? `INDUSTRY FOCUS: ${industryFocus} - ${industryInstructions}` : ''}
+    ${researchFocus ? `RESEARCH FOCUS: ${researchFocus} - ${focusInstructions}` : ''}
   
      1) BUILD UPON existing research for: ${originalQuery}
   2) Provide FRESH PERSPECTIVES and NEW INSIGHTS that weren't covered before
@@ -240,44 +357,44 @@ export async function POST(request: NextRequest) {
      MANDATORY OUTPUT STRUCTURE (START WITH TABLES):
      
      DETAILED TABULAR DATA (MUST INCLUDE ALL - THIS IS THE PRIMARY CONTENT):
-        1. Recent Market Analysis Table (25+ companies)
+        1. Recent Market Analysis Table (${depthConfig.tableCount})
            Company | Market Position | Recent Developments | Funding Status | Revenue Growth | Key Metrics | Market Share | Source/Date
          
-        2. Funding & Investment Trends Table (25+ companies)
+        2. Funding & Investment Trends Table (${depthConfig.tableCount})
            Company | Latest Round | Amount (USD) | Date | Lead Investor | Valuation | Previous Rounds | Revenue Multiple | Source/Date
          
-        3. Revenue & Growth Metrics Table (25+ companies)
+        3. Revenue & Growth Metrics Table (${depthConfig.tableCount})
            Company | Annual Revenue | YoY Growth % | ARR/MRR | Profitability | Revenue Model | Key Customers | Market Position | Source/Date
          
-        4. Competitive Landscape Table (25+ companies)
+        4. Competitive Landscape Table (${depthConfig.tableCount})
            Company | Market Share % | Key Differentiators | Strengths | Weaknesses | Recent Moves | Threat Level | Strategic Position | Source/Date
          
-        5. Technology & Innovation Table (20+ companies)
+        5. Technology & Innovation Table (${depthConfig.tableCount})
            Company | Technology Focus | Innovation Areas | R&D Investment | Patents/IP | Partnerships | Market Impact | IP Portfolio | Source/Date
          
-        6. Regulatory & Compliance Table (20+ items)
+        6. Regulatory & Compliance Table (${depthConfig.tableCount})
            Regulation/Policy | Effective Date | Impact Level | Affected Companies | Compliance Cost | Requirements | Penalties | Implementation | Source/Date
          
-        7. Market Opportunities Table (20+ opportunities)
+        7. Market Opportunities Table (${depthConfig.tableCount})
            Opportunity | Market Size (USD) | Growth Rate | Key Players | Entry Barriers | Success Factors | ROI Potential | Timeline | Source/Date
          
-        8. Risk Assessment Table (20+ risks)
+        8. Risk Assessment Table (${depthConfig.tableCount})
            Risk Category | Likelihood | Impact | Affected Areas | Mitigation Strategies | Examples | Cost of Mitigation | Timeline | Source/Date
          
-        9. Financial Performance & Unit Economics Table (20+ companies)
+        9. Financial Performance & Unit Economics Table (${depthConfig.tableCount})
            Company | CAC | LTV | LTV/CAC Ratio | Gross Margin | Operating Margin | Burn Rate | Runway | Growth Rate | Source/Date
          
-        10. International Market Expansion Table (15+ markets)
+        10. International Market Expansion Table (${depthConfig.tableCount})
            Country/Region | Market Size | Growth Rate | Key Players | Entry Barriers | Regulatory Environment | Success Rate | Investment Required | Source/Date
          
-        11. Partnership & Strategic Alliances Table (20+ partnerships)
+        11. Partnership & Strategic Alliances Table (${depthConfig.tableCount})
            Company | Partner | Partnership Type | Value | Duration | Success Metrics | Strategic Importance | Future Plans | Source/Date
          
-        12. Customer Segmentation & Behavior Table (15+ segments)
+        12. Customer Segmentation & Behavior Table (${depthConfig.tableCount})
            Segment | Size | Growth Rate | Pain Points | Willingness to Pay | Decision Makers | Sales Cycle | Retention Rate | Source/Date
      
      KEY INSIGHTS & ANALYSIS (After Tables - hyphen bullets only)
-        - 25-30 actionable recommendations with specific steps and detailed implementation plans
+        - ${researchDepth === 'detailed' ? '35-40' : researchDepth === 'comprehensive' ? '25-30' : '15-20'} actionable recommendations with specific steps and detailed implementation plans
         - Include comprehensive timelines, costs, resource requirements, and expected outcomes
         - Focus on practical implementation for startup founders with step-by-step guidance
         - Provide detailed risk mitigation strategies and contingency plans
@@ -299,6 +416,11 @@ export async function POST(request: NextRequest) {
     : `You are an AI Research Agent inside a Startup Founder Assistant.
   Your PRIMARY JOB is to generate COMPREHENSIVE TABULAR DATA for startup founders.
   DO NOT generate traditional "Executive Summary" format - focus on detailed tables with specific data.
+  
+  RESEARCH DEPTH: ${depthConfig.analysisLevel}
+  TABLE REQUIREMENTS: ${depthConfig.tableCount}
+  ${industryFocus ? `INDUSTRY FOCUS: ${industryFocus} - ${industryInstructions}` : ''}
+  ${researchFocus ? `RESEARCH FOCUS: ${researchFocus} - ${focusInstructions}` : ''}
      
      CRITICAL FORMATTING RULES:
      - NO markdown formatting (no #, *, **, or any markdown symbols)
@@ -324,40 +446,40 @@ export async function POST(request: NextRequest) {
      3. Market Sizing Table (Comprehensive)
         Market Segment | TAM (USD) | SAM (USD) | SOM (USD) | CAGR | Key Players | Growth Drivers | Regional Breakdown | Source/Year
      
-     4. Company Narratives Table (Large - 25+ companies)
+     4. Company Narratives Table (Large - ${depthConfig.tableCount})
         Company | Year Founded | Key Milestones | Founder Background | Pivots/Exits | Key Lessons | Current Status | Future Plans | Source/Date
      
-     5. Competitor Benchmarks Table (25+ companies)
+     5. Competitor Benchmarks Table (${depthConfig.tableCount})
         Company | Market Position | Market Share % | CAC | LTV | Differentiation | Strengths | Weaknesses | Recent Moves | Source/Date
      
-     6. Trends & Risks Table (25+ items)
+     6. Trends & Risks Table (${depthConfig.tableCount})
         Trend/Risk | Sector Impact | Example Company | Likelihood | Impact | Mitigation | Founder Takeaway | Timeline | Source/Date
      
-     7. Technology & Innovation Table (20+ companies)
+     7. Technology & Innovation Table (${depthConfig.tableCount})
         Company | Technology Focus | Innovation Areas | R&D Investment | Patents | Partnerships | Market Impact | IP Portfolio | Source/Date
      
-     8. Regulatory & Compliance Table (20+ items)
+     8. Regulatory & Compliance Table (${depthConfig.tableCount})
         Regulation | Effective Date | Impact Level | Affected Activities | Compliance Steps | Cost | Requirements | Penalties | Source/Date
      
-     9. Market Opportunities Table (20+ opportunities)
+     9. Market Opportunities Table (${depthConfig.tableCount})
         Opportunity | Market Size (USD) | Growth Rate | Entry Barriers | Success Factors | Key Players | Timeline | ROI Potential | Source/Date
      
      10. Implementation Roadmap Table (24-36 months)
         Phase | Objectives | Key Activities | Timeline | Estimated Cost (USD) | KPIs | Risks | Mitigations | Resources Needed | Source/Date
      
-     11. Financial Metrics & Unit Economics Table (20+ companies)
+     11. Financial Metrics & Unit Economics Table (${depthConfig.tableCount})
         Company | CAC | LTV | LTV/CAC Ratio | Gross Margin | Operating Margin | Burn Rate | Runway | Revenue Growth | Source/Date
      
-     12. International Market Analysis Table (15+ markets)
+     12. International Market Analysis Table (${depthConfig.tableCount})
         Country/Region | Market Size | Growth Rate | Key Players | Entry Barriers | Regulatory Environment | Cultural Factors | Success Rate | Source/Date
      
-     13. Partnership & Ecosystem Table (20+ partnerships)
+     13. Partnership & Ecosystem Table (${depthConfig.tableCount})
         Company | Partner | Partnership Type | Value | Duration | Success Metrics | Strategic Importance | Future Plans | Source/Date
      
-     14. Customer Analysis Table (15+ customer segments)
+     14. Customer Analysis Table (${depthConfig.tableCount})
         Segment | Size | Growth Rate | Pain Points | Willingness to Pay | Decision Makers | Sales Cycle | Retention Rate | Source/Date
      
-     15. Technology Stack & Infrastructure Table (15+ companies)
+     15. Technology Stack & Infrastructure Table (${depthConfig.tableCount})
         Company | Core Technology | Infrastructure | Scalability | Security | Performance | Cost Structure | Innovation Level | Source/Date
      
      KEY INSIGHTS & ANALYSIS (After Tables - hyphen bullets only)
@@ -392,8 +514,8 @@ export async function POST(request: NextRequest) {
           content: query
         }
       ],
-      temperature: 0.7,
-      max_tokens: isAdditionalResearch ? 16000 : 12000, // Increased but reasonable token limits
+      temperature: depthConfig.temperature,
+      max_tokens: depthConfig.tokenLimit, // Dynamic token limits based on research depth
     });
 
     const answer = answerCompletion.choices[0]?.message?.content || "No answer generated.";
