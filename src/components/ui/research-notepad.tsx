@@ -2,8 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Download, Trash, StickyNote, Share, FileText, Save, Bold, Italic, List, Type, Highlighter, AlignLeft, AlignCenter, AlignRight } from "lucide-react";
+import { X, Download, Trash, StickyNote, Share, FileText, Save, Bold, Italic, List, Type, Highlighter, AlignLeft, AlignCenter, AlignRight, BarChart3, PieChart, Table, Scissors } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { StructuredContentRenderer } from "./structured-content-renderer";
+// PDF libraries - will be available after npm install
+let jsPDF: any = null;
+let html2canvas: any = null;
+
+try {
+  jsPDF = require('jspdf').default;
+  html2canvas = require('html2canvas').default;
+} catch (e) {
+  console.log('PDF libraries not installed yet. Using fallback text export.');
+}
 
 type ResearchNotepadProps = {
   className?: string;
@@ -22,18 +33,85 @@ export function ResearchNotepad({ className, storageKey = "research_notepad_cont
   const [content, setContent] = useState("");
   const [title, setTitle] = useState("");
   const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [isStructuredMode, setIsStructuredMode] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
+
+  // Function to create formatted tables
+  const createFormattedTable = useCallback((data: Array<Record<string, string>>, headers: string[]): string => {
+    if (data.length === 0) return '';
+    
+    let table = '';
+    
+    // Create header row
+    table += headers.join(' | ') + '\n';
+    table += headers.map(() => '---').join(' | ') + '\n';
+    
+    // Create data rows
+    data.forEach(row => {
+      const rowData = headers.map(header => row[header] || '');
+      table += rowData.join(' | ') + '\n';
+    });
+    
+    return table;
+  }, []);
+
+
+  // Simple function to process incoming content (clean format)
+  const processAndStructureContent = useCallback((rawContent: string): string => {
+    return `\n\n${rawContent}\n`;
+  }, []);
+
+  // Function to clean up timestamp lines and structured data from content
+  const cleanTimestampLines = useCallback((content: string): string => {
+    return content
+      // Remove timestamp lines
+      .replace(/--- Added to Notes \([^)]+\) ---\s*\n/g, '')
+      .replace(/--- End of content ---\s*\n/g, '')
+      // Remove structured data sections
+      .replace(/📊 AUTOMATED DATA ANALYSIS[\s\S]*?--- End of Data Visualization ---/g, '')
+      .replace(/📊 VISUALIZATION DATA \(JSON\)[\s\S]*?}/g, '')
+      .replace(/📈 KEY METRICS[\s\S]*?(?=\n\n|$)/g, '')
+      .replace(/🏢 MARKET ANALYSIS[\s\S]*?(?=\n\n|$)/g, '')
+      .replace(/⚔️ COMPETITIVE LANDSCAPE[\s\S]*?(?=\n\n|$)/g, '')
+      .replace(/💰 FUNDING & INVESTMENT DATA[\s\S]*?(?=\n\n|$)/g, '')
+      .replace(/💡 KEY INSIGHTS & RECOMMENDATIONS[\s\S]*?(?=\n\n|$)/g, '')
+      .replace(/📋 STRUCTURED DATA TABLE[\s\S]*?(?=\n\n|$)/g, '')
+      // Remove JSON-like data patterns
+      .replace(/"pieData"[\s\S]*?],/g, '')
+      .replace(/"barData"[\s\S]*?],/g, '')
+      .replace(/"tableData"[\s\S]*?],/g, '')
+      .replace(/"value"[\s\S]*?[,\n]/g, '')
+      .replace(/"color"[\s\S]*?[,\n]/g, '')
+      .replace(/"label"[\s\S]*?[,\n]/g, '')
+      .replace(/"Column \d+"[\s\S]*?[,\n]/g, '')
+      // Clean up multiple newlines
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }, []);
 
   // Load persisted state
   useEffect(() => {
     try {
       const saved = localStorage.getItem(storageKey);
-      if (saved) setContent(saved);
+      if (saved) {
+        // Clean up any existing timestamp lines
+        const cleanedContent = cleanTimestampLines(saved);
+        
+        // Check if cleaned content needs processing
+        if (!cleanedContent.includes('📊 AUTOMATED DATA ANALYSIS') && 
+            (cleanedContent.includes(':') || cleanedContent.includes('|') || cleanedContent.includes('%'))) {
+          // Process existing content if it contains semi-structured data
+          const processedContent = processAndStructureContent(cleanedContent);
+          setContent(processedContent);
+        } else {
+          setContent(cleanedContent);
+        }
+      }
       const savedTitle = localStorage.getItem(`${storageKey}_title`);
       if (savedTitle) setTitle(savedTitle);
     } catch {}
-  }, [storageKey]);
+  }, [storageKey, processAndStructureContent, cleanTimestampLines]);
 
   // Persist on change (debounced)
   useEffect(() => {
@@ -46,7 +124,107 @@ export function ResearchNotepad({ className, storageKey = "research_notepad_cont
     return () => clearTimeout(t);
   }, [content, title, storageKey]);
 
-  const exportText = useCallback(() => {
+  const renderMarkdown = useCallback((text: string) => {
+    return text
+      .replace(/^### (.*$)/gim, '<h3 class="text-lg font-semibold text-white/90 mb-2 mt-4">$1</h3>')
+      .replace(/^## (.*$)/gim, '<h2 class="text-xl font-semibold text-white mb-3 mt-5">$1</h2>')
+      .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold text-white mb-4 mt-6">$1</h1>')
+      .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-white">$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em class="italic text-white/90">$1</em>')
+      .replace(/==(.*?)==/g, '<mark class="bg-yellow-500/30 text-yellow-100 px-1 rounded">$1</mark>')
+      .replace(/`(.*?)`/g, '<code class="bg-white/10 text-green-300 px-2 py-1 rounded text-sm font-mono">$1</code>')
+      .replace(/^> (.*$)/gim, '<blockquote class="border-l-4 border-blue-500/50 pl-4 py-2 bg-blue-500/10 text-blue-200 italic my-2">$1</blockquote>')
+      .replace(/^• (.*$)/gim, '<li class="text-white/80 ml-4 mb-1">• $1</li>')
+      .replace(/^\d+\. (.*$)/gim, '<li class="text-white/80 ml-4 mb-1">$&</li>')
+      .replace(/\n/g, '<br>');
+  }, []);
+
+  const exportPDF = useCallback(async () => {
+    // Check if PDF libraries are available
+    if (!jsPDF || !html2canvas) {
+      console.log('PDF libraries not available, using text export fallback');
+      // Fallback to text export
+      const blob = new Blob([`# ${title || "Research Notes"}\n\n${content}`], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${(title || "research-notes").replace(/[^a-z0-9-_]+/gi, "-").toLowerCase()}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    try {
+      // Create a temporary container for the content
+      const tempContainer = document.createElement('div');
+      tempContainer.style.position = 'absolute';
+      tempContainer.style.left = '-9999px';
+      tempContainer.style.top = '0';
+      tempContainer.style.width = '800px';
+      tempContainer.style.backgroundColor = '#0b0b0b';
+      tempContainer.style.color = '#ffffff';
+      tempContainer.style.padding = '40px';
+      tempContainer.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+      tempContainer.style.lineHeight = '1.6';
+      
+      // Add title
+      const titleElement = document.createElement('h1');
+      titleElement.textContent = title || "Research Notes";
+      titleElement.style.fontSize = '24px';
+      titleElement.style.fontWeight = 'bold';
+      titleElement.style.marginBottom = '20px';
+      titleElement.style.color = '#ffffff';
+      tempContainer.appendChild(titleElement);
+      
+      // Add content
+      const contentElement = document.createElement('div');
+      contentElement.innerHTML = renderMarkdown(content);
+      contentElement.style.fontSize = '14px';
+      contentElement.style.color = '#e5e5e5';
+      tempContainer.appendChild(contentElement);
+      
+      document.body.appendChild(tempContainer);
+      
+      // Generate PDF
+      const canvas = await html2canvas(tempContainer, {
+        backgroundColor: '#0b0b0b',
+        scale: 2,
+        useCORS: true,
+        allowTaint: true
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      const imgWidth = 210;
+      const pageHeight = 295;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      
+      let position = 0;
+      
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+      
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+      
+      // Clean up
+      document.body.removeChild(tempContainer);
+      
+      // Download PDF
+      const fileName = `${(title || "research-notes").replace(/[^a-z0-9-_]+/gi, "-").toLowerCase()}.pdf`;
+      pdf.save(fileName);
+      
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      // Fallback to text export
     const blob = new Blob([`# ${title || "Research Notes"}\n\n${content}`], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -56,7 +234,8 @@ export function ResearchNotepad({ className, storageKey = "research_notepad_cont
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [title, content]);
+    }
+  }, [title, content, renderMarkdown]);
 
   const saveLocally = useCallback(() => {
     try {
@@ -154,26 +333,28 @@ export function ResearchNotepad({ className, storageKey = "research_notepad_cont
     }, 0);
   }, [content]);
 
+
   const togglePreview = useCallback(() => {
     setIsPreviewMode(!isPreviewMode);
+    setIsStructuredMode(false); // Exit structured mode when switching to preview
   }, [isPreviewMode]);
 
-  const renderMarkdown = useCallback((text: string) => {
-    return text
-      .replace(/^### (.*$)/gim, '<h3 class="text-lg font-semibold text-white/90 mb-2 mt-4">$1</h3>')
-      .replace(/^## (.*$)/gim, '<h2 class="text-xl font-semibold text-white mb-3 mt-5">$1</h2>')
-      .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold text-white mb-4 mt-6">$1</h1>')
-      .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-white">$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em class="italic text-white/90">$1</em>')
-      .replace(/==(.*?)==/g, '<mark class="bg-yellow-500/30 text-yellow-100 px-1 rounded">$1</mark>')
-      .replace(/`(.*?)`/g, '<code class="bg-white/10 text-green-300 px-2 py-1 rounded text-sm font-mono">$1</code>')
-      .replace(/^> (.*$)/gim, '<blockquote class="border-l-4 border-blue-500/50 pl-4 py-2 bg-blue-500/10 text-blue-200 italic my-2">$1</blockquote>')
-      .replace(/^• (.*$)/gim, '<li class="text-white/80 ml-4 mb-1">• $1</li>')
-      .replace(/^\d+\. (.*$)/gim, '<li class="text-white/80 ml-4 mb-1">$&</li>')
-      .replace(/\n/g, '<br>');
-  }, []);
+  const toggleStructuredMode = useCallback(() => {
+    setIsStructuredMode(!isStructuredMode);
+    setIsPreviewMode(false); // Exit preview mode when switching to structured
+  }, [isStructuredMode]);
 
-  const generateReport = useCallback(() => {
+  // Check if content has structured data
+  const hasStructuredData = useMemo(() => {
+    return content.includes('📊 VISUALIZATION DATA (JSON)') || 
+           content.includes('📈 KEY METRICS') ||
+           content.includes('🏢 MARKET ANALYSIS') ||
+           content.includes('⚔️ COMPETITIVE LANDSCAPE') ||
+           content.includes('💰 FUNDING & INVESTMENT DATA') ||
+           content.includes('📊 AUTOMATED DATA ANALYSIS');
+  }, [content]);
+
+  const generateReport = useCallback(async () => {
     if (!content.trim()) {
       const event = new CustomEvent("research-report-error", { detail: "No content to generate report from" });
       window.dispatchEvent(event);
@@ -181,7 +362,7 @@ export function ResearchNotepad({ className, storageKey = "research_notepad_cont
     }
 
     const timestamp = new Date().toLocaleString();
-    const report = `# Research Analysis Report
+    const reportContent = `# Research Analysis Report
 Generated: ${timestamp}
 Research Title: ${title || "Untitled Research"}
 
@@ -198,7 +379,70 @@ ${content}
 - Source: ${window.location.href}
 `;
 
-    const blob = new Blob([report], { type: "text/plain;charset=utf-8" });
+    try {
+      // Create a temporary container for the report
+      const tempContainer = document.createElement('div');
+      tempContainer.style.position = 'absolute';
+      tempContainer.style.left = '-9999px';
+      tempContainer.style.top = '0';
+      tempContainer.style.width = '800px';
+      tempContainer.style.backgroundColor = '#0b0b0b';
+      tempContainer.style.color = '#ffffff';
+      tempContainer.style.padding = '40px';
+      tempContainer.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+      tempContainer.style.lineHeight = '1.6';
+      
+      // Add report content
+      const reportElement = document.createElement('div');
+      reportElement.innerHTML = renderMarkdown(reportContent);
+      reportElement.style.fontSize = '14px';
+      reportElement.style.color = '#e5e5e5';
+      tempContainer.appendChild(reportElement);
+      
+      document.body.appendChild(tempContainer);
+      
+      // Generate PDF
+      const canvas = await html2canvas(tempContainer, {
+        backgroundColor: '#0b0b0b',
+        scale: 2,
+        useCORS: true,
+        allowTaint: true
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      const imgWidth = 210;
+      const pageHeight = 295;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      
+      let position = 0;
+      
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+      
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+      
+      // Clean up
+      document.body.removeChild(tempContainer);
+      
+      // Download PDF
+      const fileName = `research-report-${(title || "analysis").replace(/[^a-z0-9-_]+/gi, "-").toLowerCase()}-${Date.now()}.pdf`;
+      pdf.save(fileName);
+      
+      const event = new CustomEvent("research-report-generated", { detail: { title, wordCount: content.split(/\s+/).length } });
+      window.dispatchEvent(event);
+      
+    } catch (error) {
+      console.error('Error generating PDF report:', error);
+      // Fallback to text export
+      const blob = new Blob([reportContent], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -207,10 +451,8 @@ ${content}
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-
-    const event = new CustomEvent("research-report-generated", { detail: { title, wordCount: content.split(/\s+/).length } });
-    window.dispatchEvent(event);
-  }, [title, content]);
+    }
+  }, [title, content, renderMarkdown]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -262,7 +504,7 @@ ${content}
     };
     const exportHandler = () => {
       if (!open) setOpen(true);
-      exportText();
+      exportPDF();
     };
     const saveHandler = () => {
       if (!open) setOpen(true);
@@ -279,7 +521,11 @@ ${content}
     const addToNotepadHandler = (event: any) => {
       if (!open) setOpen(true);
       const newContent = event.detail?.content || '';
-      setContent(prev => prev + newContent);
+      
+      // Process and structure the incoming content
+      const processedContent = processAndStructureContent(newContent);
+      setContent(prev => prev + processedContent);
+      
       // Focus the textarea after adding content
       setTimeout(() => textareaRef.current?.focus(), 100);
     };
@@ -302,7 +548,7 @@ ${content}
       window.removeEventListener("generate-research-report", reportHandler as EventListener);
       window.removeEventListener("add-to-research-notepad", addToNotepadHandler as EventListener);
     };
-  }, [storageKey, exportText, saveLocally, shareResearchContent, generateReport]);
+  }, [storageKey, exportPDF, saveLocally, shareResearchContent, generateReport]);
 
   const header = useMemo(() => (
     <div className="border-b border-white/[0.08]">
@@ -319,9 +565,9 @@ ${content}
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => exportText()}
+            onClick={() => exportPDF()}
             className="px-2 py-1 rounded-md bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] text-white/80 text-xs flex items-center gap-1"
-            title="Export (.txt)"
+            title="Export (.pdf)"
           >
             <Download className="w-3.5 h-3.5" /> Export
           </button>
@@ -336,7 +582,7 @@ ${content}
               textareaRef.current?.focus();
             }}
             className="px-2 py-1 rounded-md bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] text-white/80 text-xs flex items-center gap-1"
-            title="Clear"
+            title="Clear all content"
           >
             <Trash className="w-3.5 h-3.5" /> Clear
           </button>
@@ -373,6 +619,13 @@ ${content}
             title="Highlight"
           >
             <Highlighter className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => setOpen(false)}
+            className="p-1.5 rounded hover:bg-white/[0.08] text-white/70 hover:text-white transition-colors"
+            title="Close notepad"
+          >
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
         
@@ -437,6 +690,35 @@ ${content}
         
         <div className="flex-1" />
         
+        {hasStructuredData && (
+          <button
+            onClick={toggleStructuredMode}
+            className={`px-2 py-1 rounded text-xs transition-colors flex items-center gap-1 ${
+              isStructuredMode 
+                ? "bg-green-500/20 text-green-300 border border-green-500/30" 
+                : "bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] text-white/80"
+            }`}
+            title="Toggle Structured View with D3.js Visualizations"
+          >
+            <BarChart3 className="w-3 h-3" />
+            {isStructuredMode ? "Text" : "Charts"}
+          </button>
+        )}
+        
+        {!hasStructuredData && content && (content.includes(':') || content.includes('|') || content.includes('%')) && (
+          <button
+            onClick={() => {
+              const processedContent = processAndStructureContent(content);
+              setContent(processedContent);
+            }}
+            className="px-2 py-1 rounded text-xs transition-colors flex items-center gap-1 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 text-blue-300"
+            title="Process and Structure Data"
+          >
+            <Table className="w-3 h-3" />
+            Structure
+          </button>
+        )}
+        
         <button
           onClick={togglePreview}
           className={`px-2 py-1 rounded text-xs transition-colors ${
@@ -450,7 +732,7 @@ ${content}
         </button>
       </div>
     </div>
-  ), [title, exportText, insertFormatting, togglePreview, isPreviewMode]);
+  ), [title, exportPDF, insertFormatting, togglePreview, isPreviewMode, hasStructuredData, toggleStructuredMode, isStructuredMode, content, processAndStructureContent]);
 
   return (
     <AnimatePresence>
@@ -469,7 +751,11 @@ ${content}
         >
           {header}
           <div className="flex-1">
-            {isPreviewMode ? (
+            {isStructuredMode ? (
+              <div className="w-full h-full overflow-y-auto">
+                <StructuredContentRenderer content={content} />
+              </div>
+            ) : isPreviewMode ? (
               <div 
                 ref={editorRef}
                 className="w-full h-full p-4 overflow-y-auto"
@@ -488,11 +774,17 @@ ${content}
           <div className="p-2 border-t border-white/[0.08] text-[10px] text-white/40 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <span>Autosaved locally</span>
-              {!isPreviewMode && (
+              {!isPreviewMode && !isStructuredMode && (
                 <span className="text-white/30">•</span>
               )}
-              {!isPreviewMode && (
+              {!isPreviewMode && !isStructuredMode && (
                 <span>Use toolbar or Ctrl+B/I for formatting</span>
+              )}
+              {isStructuredMode && (
+                <span className="text-green-400">•</span>
+              )}
+              {isStructuredMode && (
+                <span className="text-green-400">Structured view with D3.js visualizations</span>
               )}
             </div>
             <span>{new Date().toLocaleTimeString()}</span>

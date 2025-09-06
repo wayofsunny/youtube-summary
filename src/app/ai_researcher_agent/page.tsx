@@ -1,12 +1,165 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Bot, Lightbulb, Target, TrendingUp, Users, Building2, Zap, Copy, Table } from "lucide-react";
+import { Search, Bot, Lightbulb, Target, TrendingUp, Users, Building2, Zap, Copy, Table, BarChart3, PieChart, X } from "lucide-react";
 import { ExpandableDocsSidebar } from "@/components/ui/expandable-docs-sidebar";
 import { ResearchQuestionsModal } from "@/components/ui/research-questions-modal";
+// PDF libraries - will be available after npm install
+let jsPDF: any = null;
+let html2canvas: any = null;
+
+try {
+  jsPDF = require('jspdf').default;
+  html2canvas = require('html2canvas').default;
+} catch (e) {
+  console.log('PDF libraries not installed yet. Using fallback text export.');
+}
+
+// Simple inline chart component
+function InlineChart({ data, onClose }: { data: any; onClose: () => void }) {
+  const [activeTab, setActiveTab] = useState<'pie' | 'bar'>('pie');
+  const pieRef = useRef<SVGSVGElement>(null);
+  const barRef = useRef<SVGSVGElement>(null);
+
+  const colorPalette = [
+    '#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6',
+    '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1'
+  ];
+
+  useEffect(() => {
+    if (activeTab === 'pie' && data.pieChart && pieRef.current) {
+      const svg = pieRef.current;
+      svg.innerHTML = '';
+      
+      const width = 300;
+      const height = 200;
+      const radius = Math.min(width, height) / 2 - 10;
+      
+      const pieData = data.pieChart.data;
+      const total = pieData.reduce((sum: number, d: any) => sum + d.value, 0);
+      
+      let currentAngle = 0;
+      pieData.forEach((d: any, i: number) => {
+        const sliceAngle = (d.value / total) * 2 * Math.PI;
+        const startAngle = currentAngle;
+        const endAngle = currentAngle + sliceAngle;
+        
+        const x1 = width / 2 + radius * Math.cos(startAngle);
+        const y1 = height / 2 + radius * Math.sin(startAngle);
+        const x2 = width / 2 + radius * Math.cos(endAngle);
+        const y2 = height / 2 + radius * Math.sin(endAngle);
+        
+        const largeArcFlag = sliceAngle > Math.PI ? 1 : 0;
+        const pathData = [
+          `M ${width / 2} ${height / 2}`,
+          `L ${x1} ${y1}`,
+          `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}`,
+          'Z'
+        ].join(' ');
+        
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', pathData);
+        path.setAttribute('fill', colorPalette[i % colorPalette.length]);
+        path.setAttribute('stroke', 'white');
+        path.setAttribute('stroke-width', '1');
+        
+        svg.appendChild(path);
+        currentAngle += sliceAngle;
+      });
+    }
+    
+    if (activeTab === 'bar' && data.barChart && barRef.current) {
+      const svg = barRef.current;
+      svg.innerHTML = '';
+      
+      const width = 300;
+      const height = 200;
+      const margin = { top: 20, right: 20, bottom: 40, left: 40 };
+      const chartWidth = width - margin.left - margin.right;
+      const chartHeight = height - margin.top - margin.bottom;
+      
+      const barData = data.barChart.data;
+      const maxValue = Math.max(...barData.map((d: any) => d.value));
+      
+      barData.forEach((d: any, i: number) => {
+        const barHeight = (d.value / maxValue) * chartHeight;
+        const barWidth = chartWidth / barData.length - 2;
+        const x = margin.left + i * (chartWidth / barData.length);
+        const y = margin.top + chartHeight - barHeight;
+        
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', x.toString());
+        rect.setAttribute('y', y.toString());
+        rect.setAttribute('width', barWidth.toString());
+        rect.setAttribute('height', barHeight.toString());
+        rect.setAttribute('fill', colorPalette[i % colorPalette.length]);
+        rect.setAttribute('stroke', 'white');
+        rect.setAttribute('stroke-width', '1');
+        
+        svg.appendChild(rect);
+      });
+    }
+  }, [activeTab, data]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mt-4 p-4 bg-white/5 border border-white/10 rounded-lg"
+    >
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-sm font-semibold text-white">Data Visualization</h4>
+        <button
+          onClick={onClose}
+          className="p-1 hover:bg-white/10 rounded text-white/60 hover:text-white"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      
+      <div className="flex gap-2 mb-3">
+        {data.pieChart && (
+          <button
+            onClick={() => setActiveTab('pie')}
+            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+              activeTab === 'pie'
+                ? 'bg-blue-500 text-white'
+                : 'bg-white/10 text-white/80 hover:bg-white/20'
+            }`}
+          >
+            <PieChart className="w-3 h-3 inline mr-1" />
+            Pie
+          </button>
+        )}
+        {data.barChart && (
+          <button
+            onClick={() => setActiveTab('bar')}
+            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+              activeTab === 'bar'
+                ? 'bg-blue-500 text-white'
+                : 'bg-white/10 text-white/80 hover:bg-white/20'
+            }`}
+          >
+            <BarChart3 className="w-3 h-3 inline mr-1" />
+            Bar
+          </button>
+        )}
+      </div>
+      
+      <div className="flex justify-center">
+        {activeTab === 'pie' && (
+          <svg ref={pieRef} width="300" height="200"></svg>
+        )}
+        {activeTab === 'bar' && (
+          <svg ref={barRef} width="300" height="200"></svg>
+        )}
+      </div>
+    </motion.div>
+  );
+}
 
 function ElegantShape({
     className,
@@ -90,6 +243,8 @@ export default function AIResearcherAgent() {
   const [copiedParagraphs, setCopiedParagraphs] = useState<Set<number>>(new Set());
   const [structuredParagraphs, setStructuredParagraphs] = useState<Set<number>>(new Set());
   const [showResearchModal, setShowResearchModal] = useState(false);
+  const [activeChartParagraph, setActiveChartParagraph] = useState<number | null>(null);
+  const [chartData, setChartData] = useState<any>(null);
   
   // Debug modal state changes
   useEffect(() => {
@@ -280,8 +435,179 @@ Focus on providing EXTREMELY DETAILED, DATA-RICH insights with specific numbers,
     setShowResearchModal(false);
   };
 
-  // Function to detect and convert semi-tabular data to proper structure
-  const convertToStructuredTable = (paragraphText: string, paragraphIndex: number) => {
+  // Function to export research results as PDF
+  const exportResearchAsPDF = useCallback(async () => {
+    if (!researchResults) return;
+    
+    // Check if PDF libraries are available
+    if (!jsPDF || !html2canvas) {
+      console.log('PDF libraries not available, using text export fallback');
+      // Fallback to text export
+      const blob = new Blob([researchResults], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = 'ai-research-' + query.replace(/[^a-z0-9-_]+/gi, "-").toLowerCase() + '.txt';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      return;
+    }
+    
+    try {
+      // Create a temporary container for the content
+      const tempContainer = document.createElement('div');
+      tempContainer.style.position = 'absolute';
+      tempContainer.style.left = '-9999px';
+      tempContainer.style.top = '0';
+      tempContainer.style.width = '800px';
+      tempContainer.style.backgroundColor = '#0b0b0b';
+      tempContainer.style.color = '#ffffff';
+      tempContainer.style.padding = '40px';
+      tempContainer.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+      tempContainer.style.lineHeight = '1.6';
+      
+      // Add title
+      const titleElement = document.createElement('h1');
+      titleElement.textContent = `AI Research: ${query}`;
+      titleElement.style.fontSize = '24px';
+      titleElement.style.fontWeight = 'bold';
+      titleElement.style.marginBottom = '20px';
+      titleElement.style.color = '#ffffff';
+      tempContainer.appendChild(titleElement);
+      
+      // Add timestamp
+      const timestampElement = document.createElement('p');
+      timestampElement.textContent = `Generated: ${new Date().toLocaleString()}`;
+      timestampElement.style.fontSize = '12px';
+      timestampElement.style.color = '#888';
+      timestampElement.style.marginBottom = '30px';
+      tempContainer.appendChild(timestampElement);
+      
+      // Add content
+      const contentElement = document.createElement('div');
+      contentElement.innerHTML = researchResults.replace(/\n/g, '<br>');
+      contentElement.style.fontSize = '14px';
+      contentElement.style.color = '#e5e5e5';
+      tempContainer.appendChild(contentElement);
+      
+      document.body.appendChild(tempContainer);
+      
+      // Generate PDF
+      const canvas = await html2canvas(tempContainer, {
+        backgroundColor: '#0b0b0b',
+        scale: 2,
+        useCORS: true,
+        allowTaint: true
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      const imgWidth = 210;
+      const pageHeight = 295;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      
+      let position = 0;
+      
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+      
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+      
+      // Clean up
+      document.body.removeChild(tempContainer);
+      
+      // Download PDF
+      const fileName = 'ai-research-' + query.replace(/[^a-z0-9-_]+/gi, "-").toLowerCase() + '.pdf';
+      pdf.save(fileName);
+      
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      // Fallback to text export
+      const blob = new Blob([researchResults], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = 'ai-research-' + query.replace(/[^a-z0-9-_]+/gi, "-").toLowerCase() + '.txt';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  }, [researchResults, query]);
+
+  // Simple function to generate visualization content for the notepad
+  const generateVisualizationContent = (paragraphText: string, timestamp: string): string => {
+    // Just return the original paragraph text with minimal formatting
+    return `\n\n${paragraphText}\n`;
+  };
+
+  // Function to generate chart data from paragraph text
+  const generateChartData = (paragraphText: string) => {
+    const lines = paragraphText.split('\n').filter(line => line.trim());
+    
+    // Extract structured data
+    const tables: Array<Record<string, string>> = [];
+    const metrics: Array<{label: string, value: string}> = [];
+    
+    // Parse different data patterns
+    lines.forEach(line => {
+      // Handle key-value pairs
+      if (line.includes(':') && !line.includes('|')) {
+        const [key, value] = line.split(':').map(s => s.trim());
+        if (key && value) {
+          metrics.push({ label: key, value });
+        }
+      }
+      
+      // Handle table rows with |
+      if (line.includes('|')) {
+        const cells = line.split('|').map(cell => cell.trim());
+        if (cells.length >= 2) {
+          const row: Record<string, string> = {};
+          cells.forEach((cell, index) => {
+            row[`Column${index + 1}`] = cell;
+          });
+          tables.push(row);
+        }
+      }
+    });
+
+    // Generate chart data
+    const chartData: any = {};
+    
+    if (metrics.length > 0) {
+      chartData.pieChart = {
+        data: metrics.map((metric, index) => ({
+          label: metric.label,
+          value: parseFloat(metric.value.replace(/[^0-9.-]/g, '')) || 0,
+          color: `hsl(${index * 40}, 70%, 60%)`
+        }))
+      };
+    }
+    
+    if (tables.length > 0) {
+      chartData.barChart = {
+        data: tables.slice(0, 10).map((row, index) => ({
+          label: row.Column1 || `Item ${index + 1}`,
+          value: parseFloat((row.Column2 || '0').replace(/[^0-9.-]/g, '')) || 0
+        }))
+      };
+    }
+    
+    return chartData;
+  };
+
+  // Function to show data visualization inline on research page
+  const openDataVisualization = (paragraphText: string, paragraphIndex: number) => {
     // Detect semi-tabular patterns
     const lines = paragraphText.split('\n').filter(line => line.trim());
     const hasTablePatterns = lines.some(line => 
@@ -296,74 +622,40 @@ Focus on providing EXTREMELY DETAILED, DATA-RICH insights with specific numbers,
     );
 
     if (!hasTablePatterns) {
-      alert('No semi-tabular data detected in this paragraph.');
+      alert('No structured data detected in this paragraph for visualization.');
       return;
     }
 
-    // Convert to structured table format
-    let structuredData = '';
+    // Generate chart data from paragraph
+    const chartData = generateChartData(paragraphText);
     
-    // Try to detect different patterns and convert them
-    if (paragraphText.includes('|')) {
-      // Already has some table structure, clean it up
-      structuredData = paragraphText.replace(/\|+/g, '|').replace(/\|\s*\|/g, '|');
-    } else {
-      // Convert bullet points or other patterns to table format
-      const convertedLines = lines.map(line => {
-        // Handle patterns like "Company: Value" or "Company - Value"
-        if (line.includes(':') || line.includes(' - ')) {
-          const parts = line.split(/[:|]| - /);
-          if (parts.length >= 2) {
-            return parts.map(part => part.trim()).join(' | ');
-          }
-        }
-        // Handle bullet points with data
-        if (line.includes('•') && line.includes(':')) {
-          return line.replace('•', '').replace(':', ' | ').trim();
-        }
-        return line;
+    // Set active chart for this paragraph
+    setActiveChartParagraph(paragraphIndex);
+    setChartData(chartData);
+    
+    // Mark as processed
+    setStructuredParagraphs(prev => new Set([...prev, paragraphIndex]));
+    setTimeout(() => {
+      setStructuredParagraphs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(paragraphIndex);
+        return newSet;
       });
-      
-      structuredData = convertedLines.join('\n');
-    }
-
-    // Add table headers if missing
-    if (!structuredData.includes('Company') && !structuredData.includes('Metric')) {
-      const firstLine = structuredData.split('\n')[0];
-      if (firstLine && !firstLine.includes('|')) {
-        // Add basic headers
-        structuredData = 'Metric | Value | Details\n' + structuredData;
-      }
-    }
-
-    // Copy to clipboard
-    navigator.clipboard.writeText(structuredData).then(() => {
-      setStructuredParagraphs(prev => new Set([...prev, paragraphIndex]));
-      setTimeout(() => {
-        setStructuredParagraphs(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(paragraphIndex);
-          return newSet;
-        });
-      }, 2000);
-    }).catch(err => {
-      console.error('Failed to copy structured data:', err);
-      alert('Failed to copy structured data to clipboard.');
-    });
+    }, 2000);
   };
 
-  // Function to copy paragraph to notepad
+  // Function to copy paragraph to notepad with enhanced formatting
   const copyParagraphToNotepad = (paragraphText: string, paragraphIndex: number) => {
     // Open the notepad if it's not already open
     window.dispatchEvent(new Event("open-research-notepad"));
     
-    // Add the paragraph to the notepad content
+    // Process and format the content with structure and visualizations
     const timestamp = new Date().toLocaleString();
-    const formattedText = `\n\n--- Copied from AI Research (${timestamp}) ---\n${paragraphText}\n--- End of copied content ---\n`;
+    const formattedContent = formatContentForNotepad(paragraphText, timestamp);
     
     // Dispatch event to add content to notepad
     const addToNotepadEvent = new CustomEvent("add-to-research-notepad", { 
-      detail: { content: formattedText } 
+      detail: { content: formattedContent } 
     });
     window.dispatchEvent(addToNotepadEvent);
     
@@ -377,6 +669,298 @@ Focus on providing EXTREMELY DETAILED, DATA-RICH insights with specific numbers,
       });
     }, 2000);
   };
+
+  // Simple function to format content for notepad
+  const formatContentForNotepad = (content: string, timestamp: string): string => {
+    // Just return the content with minimal formatting
+    return `\n\n${content}\n`;
+  };
+
+  // Function to extract structured data from content
+  const extractStructuredData = (lines: string[]) => {
+    const data = {
+      summary: '',
+      metrics: [] as Array<Record<string, string>>,
+      marketData: [] as Array<Record<string, string>>,
+      competitors: [] as Array<Record<string, string>>,
+      funding: [] as Array<Record<string, string>>,
+      insights: [] as string[],
+      visualizationData: null as any
+    };
+
+    let currentSection = '';
+    const pieData: Array<{label: string, value: number}> = [];
+    const barData: Array<{label: string, value: number}> = [];
+    const tableData: Array<Record<string, any>> = [];
+
+    lines.forEach(line => {
+      const trimmedLine = line.trim();
+      
+      // Detect sections
+      if (trimmedLine.includes('SUMMARY') || trimmedLine.includes('Executive')) {
+        currentSection = 'summary';
+      } else if (trimmedLine.includes('METRICS') || trimmedLine.includes('KEY')) {
+        currentSection = 'metrics';
+      } else if (trimmedLine.includes('MARKET') || trimmedLine.includes('COMPETITIVE')) {
+        currentSection = 'market';
+      } else if (trimmedLine.includes('FUNDING') || trimmedLine.includes('INVESTMENT')) {
+        currentSection = 'funding';
+      } else if (trimmedLine.includes('INSIGHT') || trimmedLine.includes('RECOMMENDATION')) {
+        currentSection = 'insights';
+      }
+
+      // Extract structured data
+      if (trimmedLine.includes('|')) {
+        const columns = trimmedLine.split('|').map(col => col.trim()).filter(col => col);
+        if (columns.length >= 2) {
+          const row: Record<string, string> = {};
+          columns.forEach((col, index) => {
+            if (index === 0) row['Metric'] = col;
+            else if (index === 1) row['Value'] = col;
+            else if (index === 2) row['Details'] = col;
+            else row[`Column ${index + 1}`] = col;
+          });
+          
+          if (currentSection === 'metrics') data.metrics.push(row);
+          else if (currentSection === 'market') data.marketData.push(row);
+          else if (currentSection === 'funding') data.funding.push(row);
+          else tableData.push(row);
+        }
+      }
+
+      // Extract percentage data for pie charts
+      const percentageMatch = trimmedLine.match(/([^:]+):\s*(\d+(?:\.\d+)?)%/);
+      if (percentageMatch) {
+        const label = percentageMatch[1].trim();
+        const value = parseFloat(percentageMatch[2]);
+        if (value > 0) {
+          pieData.push({ label, value });
+        }
+      }
+
+      // Extract numerical data for bar charts
+      const numberMatch = trimmedLine.match(/([^:]+):\s*\$?(\d+(?:,\d{3})*(?:\.\d+)?[BMK]?)/);
+      if (numberMatch) {
+        const label = numberMatch[1].trim();
+        let value = numberMatch[2].replace(/,/g, '');
+        
+        // Handle K, M, B suffixes
+        if (value.includes('K')) {
+          value = (parseFloat(value.replace('K', '')) * 1000).toString();
+        } else if (value.includes('M')) {
+          value = (parseFloat(value.replace('M', '')) * 1000000).toString();
+        } else if (value.includes('B')) {
+          value = (parseFloat(value.replace('B', '')) * 1000000000).toString();
+        }
+        
+        const numValue = parseFloat(value);
+        if (numValue > 0) {
+          barData.push({ label, value: numValue });
+        }
+      }
+
+      // Extract insights
+      if (trimmedLine.match(/^\d+\./) || trimmedLine.includes('•')) {
+        data.insights.push(trimmedLine.replace(/^\d+\.\s*/, '').replace('•', '').trim());
+      }
+    });
+
+    // Create visualization data
+    if (pieData.length > 0 || barData.length > 0 || tableData.length > 0) {
+      data.visualizationData = {
+        pieChart: pieData.length > 0 ? pieData : null,
+        barChart: barData.length > 0 ? barData : null,
+        table: tableData.length > 0 ? tableData : null
+      };
+    }
+
+    return data;
+  };
+
+  // Function to create formatted tables
+  const createFormattedTable = (data: Array<Record<string, string>>, headers: string[]): string => {
+    if (data.length === 0) return '';
+    
+    let table = '';
+    
+    // Create header row
+    table += headers.join(' | ') + '\n';
+    table += headers.map(() => '---').join(' | ') + '\n';
+    
+    // Create data rows
+    data.forEach(row => {
+      const rowData = headers.map(header => row[header] || '');
+      table += rowData.join(' | ') + '\n';
+    });
+    
+    return table;
+  };
+
+
+
+  // Function to extract comprehensive tabular data for visualizations
+  const extractComprehensiveTabularData = useCallback((results: string) => {
+    const data = {
+      pieData: [] as Array<{label: string, value: number, color?: string}>,
+      barData: [] as Array<{label: string, value: number, color?: string}>,
+      lineData: [] as Array<{label: string, value: number, color?: string}>,
+      tableData: [] as Array<Record<string, any>>
+    };
+
+    const colorPalette = [
+      '#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6',
+      '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1'
+    ];
+
+    const lines = results.split('\n');
+    
+    lines.forEach((line) => {
+      const trimmedLine = line.trim();
+      
+      // Extract percentage data for pie charts (more patterns)
+      const percentagePatterns = [
+        /([^:]+):\s*(\d+(?:\.\d+)?)%/,
+        /([^,]+),\s*(\d+(?:\.\d+)?)%/,
+        /(\w+)\s*(\d+(?:\.\d+)?)%/,
+        /([^:]+)\s*-\s*(\d+(?:\.\d+)?)%/
+      ];
+      
+      percentagePatterns.forEach(pattern => {
+        const match = trimmedLine.match(pattern);
+        if (match) {
+          const label = match[1].trim();
+          const value = parseFloat(match[2]);
+          if (value > 0 && value <= 100 && label.length < 50) {
+            data.pieData.push({ 
+              label, 
+              value,
+              color: colorPalette[data.pieData.length % colorPalette.length]
+            });
+          }
+        }
+      });
+      
+      // Extract numerical data for bar charts (more patterns)
+      const numberPatterns = [
+        /([^:]+):\s*\$?(\d+(?:,\d{3})*(?:\.\d+)?[BMK]?)/,
+        /([^,]+),\s*\$?(\d+(?:,\d{3})*(?:\.\d+)?[BMK]?)/,
+        /(\w+)\s*\$?(\d+(?:,\d{3})*(?:\.\d+)?[BMK]?)/,
+        /([^:]+)\s*-\s*\$?(\d+(?:,\d{3})*(?:\.\d+)?[BMK]?)/
+      ];
+      
+      numberPatterns.forEach(pattern => {
+        const match = trimmedLine.match(pattern);
+        if (match) {
+          const label = match[1].trim();
+          let value = match[2].replace(/,/g, '');
+          
+          // Handle K, M, B suffixes
+          if (value.includes('K')) {
+            value = (parseFloat(value.replace('K', '')) * 1000).toString();
+          } else if (value.includes('M')) {
+            value = (parseFloat(value.replace('M', '')) * 1000000).toString();
+          } else if (value.includes('B')) {
+            value = (parseFloat(value.replace('B', '')) * 1000000000).toString();
+          }
+          
+          const numValue = parseFloat(value);
+          if (numValue > 0 && numValue < 1000000000000 && label.length < 50) {
+            data.barData.push({ 
+              label, 
+              value: numValue,
+              color: colorPalette[data.barData.length % colorPalette.length]
+            });
+          }
+        }
+      });
+      
+      // Extract time-series data for line charts
+      const timePatterns = [
+        /(\d{4}):\s*(\d+(?:\.\d+)?[BMK]?)/,
+        /(\d{4})\s*-\s*(\d+(?:\.\d+)?[BMK]?)/,
+        /(\d{4})\s*(\d+(?:\.\d+)?[BMK]?)/
+      ];
+      
+      timePatterns.forEach(pattern => {
+        const match = trimmedLine.match(pattern);
+        if (match) {
+          const label = match[1];
+          let value = match[2].replace(/,/g, '');
+          
+          // Handle K, M, B suffixes
+          if (value.includes('K')) {
+            value = (parseFloat(value.replace('K', '')) * 1000).toString();
+          } else if (value.includes('M')) {
+            value = (parseFloat(value.replace('M', '')) * 1000000).toString();
+          } else if (value.includes('B')) {
+            value = (parseFloat(value.replace('B', '')) * 1000000000).toString();
+          }
+          
+          const numValue = parseFloat(value);
+          if (numValue > 0) {
+            data.lineData.push({ 
+              label, 
+              value: numValue,
+              color: colorPalette[data.lineData.length % colorPalette.length]
+            });
+          }
+        }
+      });
+      
+      // Extract table data (multiple formats)
+      const tablePatterns = [
+        // Pipe-separated
+        /\|([^|]+)\|([^|]+)\|/,
+        // Comma-separated with quotes
+        /"([^"]+)","([^"]+)"/,
+        // Tab-separated
+        /([^\t]+)\t([^\t]+)/,
+        // Colon-separated pairs
+        /([^:]+):\s*([^,]+),?\s*([^:]+):\s*([^,]+)/
+      ];
+      
+      tablePatterns.forEach(pattern => {
+        if (pattern.test(trimmedLine)) {
+          let columns: string[] = [];
+          
+          if (trimmedLine.includes('|')) {
+            columns = trimmedLine.split('|').map(col => col.trim()).filter(col => col);
+          } else if (trimmedLine.includes('"')) {
+            columns = trimmedLine.match(/"([^"]+)"/g)?.map(col => col.replace(/"/g, '')) || [];
+          } else if (trimmedLine.includes('\t')) {
+            columns = trimmedLine.split('\t').map(col => col.trim()).filter(col => col);
+          } else if (trimmedLine.includes(':')) {
+            const pairs = trimmedLine.match(/([^:]+):\s*([^,]+)/g);
+            if (pairs) {
+              pairs.forEach(pair => {
+                const [key, value] = pair.split(':').map(s => s.trim());
+                columns.push(key, value);
+              });
+            }
+          }
+          
+          if (columns.length >= 2) {
+            const row: Record<string, string> = {};
+            columns.forEach((col, colIndex) => {
+              row[`Column ${colIndex + 1}`] = col;
+            });
+            data.tableData.push(row);
+          }
+        }
+      });
+    });
+    
+    return data;
+  }, []);
+
+  // Function to copy research results in clean format
+  const formatResearchResultsForNotepad = useCallback((results: string, query: string, timestamp: string): string => {
+    // Simple, clean format - just the research query and results
+    let structuredContent = `\n\n🔍 Research Query: ${query}\n\n`;
+    structuredContent += results;
+    
+    return structuredContent;
+  }, []);
 
   // Manual generate more functionality (removed auto-scroll)
 
@@ -781,22 +1365,33 @@ Please try again or check your OpenAI API key configuration.`);
                           {researchResults.includes('Research Failed') ? 'Research Error' : '🧠 AI Research Analysis'}
                         </h3>
                         {!researchResults.includes('Research Failed') && (
-                          <Button
-                            onClick={() => {
-                              const blob = new Blob([researchResults], { type: "text/plain;charset=utf-8" });
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement("a");
-                              a.href = url;
-                              a.download = 'ai-research-' + query.replace(/[^a-z0-9-_]+/gi, "-").toLowerCase() + '.txt';
-                              document.body.appendChild(a);
-                              a.click();
-                              document.body.removeChild(a);
-                              URL.revokeObjectURL(url);
-                            }}
-                            className="bg-white/[0.1] hover:bg-white/[0.2] text-white border border-white/[0.2] rounded-lg px-4 py-2 text-sm"
-                          >
-                            Download Results
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={exportResearchAsPDF}
+                              className="bg-white/[0.1] hover:bg-white/[0.2] text-white border border-white/[0.2] rounded-lg px-4 py-2 text-sm"
+                            >
+                              Download Results (PDF)
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                // Process and structure the entire research results for notepad
+                                const timestamp = new Date().toLocaleString();
+                                const structuredContent = formatResearchResultsForNotepad(researchResults, query, timestamp);
+                                
+                                // Send to notepad
+                                const addToNotepadEvent = new CustomEvent("add-to-research-notepad", { 
+                                  detail: { content: structuredContent } 
+                                });
+                                window.dispatchEvent(addToNotepadEvent);
+                                
+                                // Open notepad
+                                window.dispatchEvent(new Event("open-research-notepad"));
+                              }}
+                              className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white border-0 rounded-lg px-4 py-2 text-sm transition-all duration-300 hover:shadow-[0_0_15px_rgba(34,197,94,0.4)] font-medium"
+                            >
+                              📝 Add to Notes
+                            </Button>
+                          </div>
                         )}
                       </div>
                       <div className="prose prose-invert max-w-none relative z-10">
@@ -819,13 +1414,13 @@ Please try again or check your OpenAI API key configuration.`);
                                     </div>
                                     <div className="flex gap-2">
                                       <button
-                                        onClick={() => convertToStructuredTable(paragraph, index)}
+                                        onClick={() => openDataVisualization(paragraph, index)}
                                         className={`opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 rounded-lg flex-shrink-0 ${
                                           structuredParagraphs.has(index)
                                             ? 'bg-blue-500/20 text-blue-300' 
                                             : 'bg-white/[0.08] hover:bg-white/[0.15] text-white/60 hover:text-white'
                                         }`}
-                                        title={structuredParagraphs.has(index) ? "Structured data copied!" : "Convert to structured table"}
+                                        title={structuredParagraphs.has(index) ? "Visualization opened!" : "Open data visualization"}
                                       >
                                         {structuredParagraphs.has(index) ? (
                                           <div className="w-4 h-4 flex items-center justify-center">
@@ -854,6 +1449,17 @@ Please try again or check your OpenAI API key configuration.`);
                                       </button>
                                     </div>
                                   </div>
+                                  
+                                  {/* Inline Chart */}
+                                  {activeChartParagraph === index && chartData && (
+                                    <InlineChart 
+                                      data={chartData} 
+                                      onClose={() => {
+                                        setActiveChartParagraph(null);
+                                        setChartData(null);
+                                      }} 
+                                    />
+                                  )}
                                 </div>
                               );
                             })}
@@ -1059,6 +1665,7 @@ OPENAI_API_KEY=your_actual_api_key_here
         onClose={handleResearchModalClose}
         onComplete={handleResearchModalComplete}
       />
+
     </div>
   );
 }
