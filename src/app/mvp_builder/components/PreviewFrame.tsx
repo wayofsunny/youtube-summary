@@ -41,6 +41,11 @@ export function PreviewFrame({ webcontainer, isReady = false }: PreviewFrameProp
     if (!webcontainer) return false;
     
     console.log('PreviewFrame: Creating working React app from scratch...');
+    console.log('PreviewFrame: WebContainer limitations:', {
+      hasSharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined',
+      isCrossOriginIsolated: window.crossOriginIsolated,
+      userAgent: navigator.userAgent
+    });
     
     try {
       // Create a minimal but working package.json
@@ -49,19 +54,17 @@ export function PreviewFrame({ webcontainer, isReady = false }: PreviewFrameProp
         "version": "1.0.0",
         "type": "module",
         "scripts": {
-          "dev": "vite --host 0.0.0.0 --port 3000",
+          "dev": "vite --host 0.0.0.0 --port 3000 --clearScreen false",
           "build": "vite build",
           "preview": "vite preview"
         },
         "dependencies": {
-          "react": "^18.2.0",
-          "react-dom": "^18.2.0"
+          "react": "18.2.0",
+          "react-dom": "18.2.0"
         },
         "devDependencies": {
-          "@types/react": "^18.2.0",
-          "@types/react-dom": "^18.2.0",
-          "@vitejs/plugin-react": "^4.0.0",
-          "vite": "^4.4.0"
+          "@vitejs/plugin-react": "4.0.0",
+          "vite": "4.4.0"
         }
       };
       
@@ -218,12 +221,14 @@ button:focus-visible {
       
       // Try npm install with a shorter timeout
       console.log('PreviewFrame: Installing dependencies for working React app...');
-      const installProcess = await webcontainer.spawn('npm', ['install', '--force']);
+      console.log('PreviewFrame: WebContainer limitations may affect npm install performance');
+      
+      const installProcess = await webcontainer.spawn('npm', ['install', '--force', '--no-audit', '--no-fund']);
       
       // Wait for install with timeout
       const installPromise = installProcess.exit;
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Install timeout')), 15000); // 15 second timeout
+        setTimeout(() => reject(new Error('Install timeout - WebContainer limitations')), 20000); // 20 second timeout
       });
       
       try {
@@ -238,7 +243,7 @@ button:focus-visible {
           const devProcess = await webcontainer.spawn('npm', ['run', 'dev']);
           
           // Wait for server to start
-          await new Promise(resolve => setTimeout(resolve, 3000));
+          await new Promise(resolve => setTimeout(resolve, 5000)); // Longer wait for WebContainer
           
           // Try to get URL
           try {
@@ -253,9 +258,13 @@ button:focus-visible {
             setIsLoading(false);
             return true;
           }
+        } else {
+          console.log('PreviewFrame: npm install failed with exit code:', exitCode);
+          console.log('PreviewFrame: This is common in WebContainer due to network/security limitations');
         }
       } catch (installErr) {
         console.log('PreviewFrame: npm install failed or timed out:', installErr);
+        console.log('PreviewFrame: WebContainer limitations detected - falling back to HTML preview');
       }
       
       return false;
@@ -354,7 +363,20 @@ button:focus-visible {
       Your application has been generated and is ready to use.
     </div>
     
-    <p>This is a fallback preview since the development server encountered issues, but your code has been successfully generated!</p>
+    <p>This is a fallback preview since WebContainer encountered limitations, but your code has been successfully generated!</p>
+    
+    <div style="background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.5); padding: 15px; border-radius: 10px; margin: 20px 0; text-align: left;">
+      <h4 style="color: #ffc107; margin-top: 0;">⚠️ WebContainer Limitations</h4>
+      <p style="margin: 10px 0; font-size: 14px;">WebContainer runs in a browser sandbox with these limitations:</p>
+      <ul style="margin: 10px 0; padding-left: 20px; font-size: 14px;">
+        <li><strong>Network restrictions:</strong> npm install may fail due to CORS/security policies</li>
+        <li><strong>Resource limits:</strong> Limited CPU/memory compared to native environments</li>
+        <li><strong>Browser compatibility:</strong> Requires Chrome 88+ or Edge 88+ with specific security headers</li>
+        <li><strong>Package size limits:</strong> Large dependencies may not download properly</li>
+        <li><strong>Native modules:</strong> Not supported in browser environment</li>
+      </ul>
+      <p style="margin: 10px 0; font-size: 14px;"><strong>Solution:</strong> Copy the generated code and run it locally for full functionality.</p>
+    </div>
     
     <div class="features">
       <div class="feature">
