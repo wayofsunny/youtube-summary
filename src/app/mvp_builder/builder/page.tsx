@@ -15,6 +15,9 @@ export default function BuilderPage() {
   const [previewUrl, setPreviewUrl] = useState('');
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [projectFiles, setProjectFiles] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [generationProgress, setGenerationProgress] = useState(0);
+  const [isWebContainerReady, setIsWebContainerReady] = useState(false);
   const router = useRouter();
   const webContainer = useWebContainer();
 
@@ -29,12 +32,20 @@ export default function BuilderPage() {
     }
   }, [router]);
 
+  // Track WebContainer readiness
+  useEffect(() => {
+    if (webContainer) {
+      setIsWebContainerReady(true);
+      console.log('WebContainer is ready');
+    }
+  }, [webContainer]);
+
   // Start preview when WebContainer is ready and we have files
   useEffect(() => {
-    if (webContainer && projectFiles && !previewUrl) {
+    if (webContainer && projectFiles && !previewUrl && !isPreviewLoading) {
       startPreview(projectFiles);
     }
-  }, [webContainer, projectFiles, previewUrl]);
+  }, [webContainer, projectFiles, previewUrl, isPreviewLoading]);
 
   const steps = [
     { id: 1, title: 'Analyzing Requirements', description: 'Understanding your application needs' },
@@ -47,64 +58,109 @@ export default function BuilderPage() {
   const handleGenerate = async () => {
     setIsGenerating(true);
     setCurrentStep(0);
+    setError(null);
+    setGenerationProgress(0);
+    let templateData = null;
+    let generatedCode = '';
 
     try {
-      // Step 1: Determine project type
+      // Step 1: Determine project type with retry logic
       setCurrentStep(0);
-      const templateResponse = await fetch('/api/mvp_builder', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          type: 'template',
-          prompt: prompt
-        })
-      });
+      let templateResponse;
+      let retryCount = 0;
+      const maxRetries = 3;
 
-      if (!templateResponse.ok) {
-        throw new Error('Failed to determine project type');
+      while (retryCount < maxRetries) {
+        try {
+          templateResponse = await fetch('/api/mvp_builder', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              type: 'template',
+              prompt: prompt
+            })
+          });
+
+          if (templateResponse.ok) {
+            templateData = await templateResponse.json();
+            setGenerationProgress(20);
+            break;
+          } else {
+            throw new Error(`HTTP ${templateResponse.status}: ${templateResponse.statusText}`);
+          }
+        } catch (error) {
+          retryCount++;
+          if (retryCount >= maxRetries) {
+            throw new Error(`Failed to determine project type after ${maxRetries} attempts: ${error}`);
+          }
+          console.warn(`Template request failed, retrying... (${retryCount}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+        }
       }
 
-      const templateData = await templateResponse.json();
-      
-      // Step 2-5: Generate code using chat
+      // Step 2-5: Generate code using chat with retry logic
       setCurrentStep(1);
-      const chatResponse = await fetch('/api/mvp_builder', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          type: 'chat',
-          messages: [
-            {
-              role: 'user',
-              content: `Generate a complete MVP application based on this description: ${prompt}. Use the following prompts: ${JSON.stringify(templateData.prompts)}`
-            }
-          ]
-        })
-      });
+      let chatResponse;
+      retryCount = 0;
 
-      if (!chatResponse.ok) {
-        throw new Error('Failed to generate code');
+      while (retryCount < maxRetries) {
+        try {
+          chatResponse = await fetch('/api/mvp_builder', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              type: 'chat',
+              messages: [
+                {
+                  role: 'user',
+                  content: `Generate a complete MVP application based on this description: ${prompt}. Use the following prompts: ${JSON.stringify(templateData?.prompts || [])}`
+                }
+              ]
+            })
+          });
+
+          if (chatResponse.ok) {
+            const chatData = await chatResponse.json();
+            generatedCode = chatData.response;
+            setGenerationProgress(60);
+            break;
+          } else {
+            throw new Error(`HTTP ${chatResponse.status}: ${chatResponse.statusText}`);
+          }
+        } catch (error) {
+          retryCount++;
+          if (retryCount >= maxRetries) {
+            console.warn(`Code generation failed after ${maxRetries} attempts, using fallback`);
+            generatedCode = generateMockCode(prompt);
+            break;
+          }
+          console.warn(`Code generation failed, retrying... (${retryCount}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+        }
       }
-
-      const chatData = await chatResponse.json();
       
-      // Simulate remaining steps
+      // Simulate remaining steps with progress feedback
       for (let i = 2; i < steps.length; i++) {
         setCurrentStep(i);
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        setGenerationProgress(60 + (i - 1) * 10);
+        await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 400));
       }
 
       // Use generated code or fallback to mock
-      const generatedCode = chatData.response || generateMockCode(prompt);
+      if (!generatedCode) {
+        generatedCode = generateMockCode(prompt);
+      }
       setGeneratedCode(generatedCode);
+      setGenerationProgress(90);
       
       // Generate project files for WebContainer
       const files = generateProjectFiles(prompt, generatedCode);
       setProjectFiles(files);
+      setGenerationProgress(100);
       
       // Start preview if WebContainer is ready
       if (webContainer) {
@@ -112,9 +168,24 @@ export default function BuilderPage() {
       }
     } catch (error) {
       console.error('Error generating MVP:', error);
-      // Fallback to mock code on error
+      
+      // Enhanced fallback with user notification
       const mockCode = generateMockCode(prompt);
       setGeneratedCode(mockCode);
+      
+      // Set error state for UI display
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setError(`Generation encountered issues: ${errorMessage}. Using fallback template.`);
+      
+      // Generate project files even with fallback
+      const files = generateProjectFiles(prompt, mockCode);
+      setProjectFiles(files);
+      setGenerationProgress(100);
+      
+      // Start preview if WebContainer is ready
+      if (webContainer) {
+        startPreview(files);
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -212,25 +283,30 @@ export default function App() {
             version: '0.0.0',
             type: 'module',
             scripts: {
-              dev: 'vite',
+              dev: 'vite --host 0.0.0.0 --port 3000',
               build: 'vite build',
-              lint: 'eslint .',
-              preview: 'vite preview'
+              lint: 'eslint . --ext js,jsx,ts,tsx',
+              preview: 'vite preview --host 0.0.0.0 --port 4173'
             },
             dependencies: {
               'lucide-react': '^0.344.0',
               'react': '^18.3.1',
               'react-dom': '^18.3.1',
-              'framer-motion': '^10.16.4'
+              'framer-motion': '^10.16.4',
+              'clsx': '^2.0.0',
+              'tailwind-merge': '^2.0.0'
             },
             devDependencies: {
               '@eslint/js': '^9.9.1',
               '@types/react': '^18.3.5',
               '@types/react-dom': '^18.3.0',
               '@vitejs/plugin-react': '^4.3.1',
+              'autoprefixer': '^10.4.16',
               'eslint': '^9.9.1',
               'eslint-plugin-react-hooks': '^5.1.0-rc.0',
               'eslint-plugin-react-refresh': '^0.4.9',
+              'postcss': '^8.4.31',
+              'tailwindcss': '^3.3.5',
               'vite': '^5.4.10'
             }
           }, null, 2)
@@ -285,40 +361,150 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
-    host: true
+    host: '0.0.0.0',
+    hmr: {
+      port: 3001
+    }
+  },
+  preview: {
+    port: 4173,
+    host: '0.0.0.0'
   }
 })`
+        }
+      },
+      'tailwind.config.js': {
+        file: {
+          contents: `/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {
+      animation: {
+        'fade-in': 'fadeIn 0.5s ease-in-out',
+        'slide-up': 'slideUp 0.3s ease-out',
+      },
+      keyframes: {
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        slideUp: {
+          '0%': { transform: 'translateY(10px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+      },
+    },
+  },
+  plugins: [],
+}`
+        }
+      },
+      'postcss.config.js': {
+        file: {
+          contents: `export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}`
+        }
+      },
+      '.eslintrc.cjs': {
+        file: {
+          contents: `module.exports = {
+  root: true,
+  env: { browser: true, es2020: true },
+  extends: [
+    'eslint:recommended',
+    '@typescript-eslint/recommended',
+    'plugin:react-hooks/recommended',
+  ],
+  ignorePatterns: ['dist', '.eslintrc.cjs'],
+  parser: '@typescript-eslint/parser',
+  plugins: ['react-refresh'],
+  rules: {
+    'react-refresh/only-export-components': [
+      'warn',
+      { allowConstantExport: true },
+    ],
+  },
+}`
         }
       }
     };
   };
 
   const startPreview = async (files: any) => {
-    if (!webContainer) return;
+    if (!webContainer) {
+      console.error('WebContainer not available');
+      setIsPreviewLoading(false);
+      return;
+    }
     
     setIsPreviewLoading(true);
     
     try {
       // Mount files to WebContainer
       await webContainer.mount(files);
+      console.log('Files mounted successfully');
       
-      // Install dependencies
-      const installProcess = await webContainer.spawn('npm', ['install']);
-      await installProcess.exit;
+      // Install dependencies with timeout
+      const installProcess = await webContainer.spawn('npm', ['install'], {
+        output: true
+      });
+      
+      // Listen to install output for debugging
+      installProcess.output.pipeTo(new WritableStream({
+        write(data) {
+          console.log('Install output:', data);
+        }
+      }));
+      
+      const installExitCode = await installProcess.exit;
+      if (installExitCode !== 0) {
+        throw new Error(`npm install failed with exit code ${installExitCode}`);
+      }
+      console.log('Dependencies installed successfully');
       
       // Start dev server
-      const devProcess = await webContainer.spawn('npm', ['run', 'dev']);
-      
-      // Listen for server ready
-      webContainer.on('server-ready', (port, url) => {
-        console.log('Server ready at:', url);
-        setPreviewUrl(url);
-        setIsPreviewLoading(false);
+      const devProcess = await webContainer.spawn('npm', ['run', 'dev'], {
+        output: true
       });
+      
+      // Listen to dev server output
+      devProcess.output.pipeTo(new WritableStream({
+        write(data) {
+          console.log('Dev server output:', data);
+        }
+      }));
+      
+      // Listen for server ready with timeout
+      const serverReadyPromise = new Promise<string>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Server startup timeout'));
+        }, 30000); // 30 second timeout
+        
+        webContainer.on('server-ready', (port, url) => {
+          clearTimeout(timeout);
+          console.log('Server ready at:', url);
+          resolve(url);
+        });
+      });
+      
+      const url = await serverReadyPromise;
+      setPreviewUrl(url);
+      setIsPreviewLoading(false);
       
     } catch (error) {
       console.error('Error starting preview:', error);
       setIsPreviewLoading(false);
+      
+      // Show user-friendly error message
+      alert(`Failed to start preview: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -409,6 +595,20 @@ export default defineConfig({
                 Generating Your MVP
               </h2>
               
+              {/* Progress Bar */}
+              <div className="mb-6">
+                <div className="flex justify-between text-sm text-gray-400 mb-2">
+                  <span>Progress</span>
+                  <span>{generationProgress}%</span>
+                </div>
+                <div className="w-full bg-gray-700 rounded-full h-2">
+                  <div 
+                    className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500 ease-out"
+                    style={{ width: `${generationProgress}%` }}
+                  />
+                </div>
+              </div>
+              
               <div className="space-y-4">
                 {steps.map((step, index) => (
                   <div
@@ -445,6 +645,33 @@ export default defineConfig({
                   </div>
                 ))}
               </div>
+              
+              {/* WebContainer Status */}
+              <div className="mt-6 p-4 bg-gray-700/50 rounded-lg">
+                <div className="flex items-center gap-2 text-sm">
+                  <div className={`w-2 h-2 rounded-full ${isWebContainerReady ? 'bg-green-500' : 'bg-yellow-500'}`} />
+                  <span className="text-gray-300">
+                    WebContainer: {isWebContainerReady ? 'Ready' : 'Initializing...'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Error Display */}
+        {error && (
+          <div className="max-w-4xl mx-auto mb-6">
+            <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-5 h-5 bg-yellow-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-xs text-black font-bold">!</span>
+                </div>
+                <div>
+                  <h3 className="text-yellow-400 font-medium mb-1">Notice</h3>
+                  <p className="text-yellow-200 text-sm">{error}</p>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -457,16 +684,27 @@ export default defineConfig({
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-gray-400" />
                   <span className="text-sm font-medium text-gray-300">Generated Code</span>
+                  <span className="text-xs text-gray-500">({generatedCode.length} characters)</span>
                 </div>
-                <button
-                  onClick={() => setGeneratedCode('')}
-                  className="text-gray-400 hover:text-white transition-colors"
-                >
-                  <Square className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => navigator.clipboard.writeText(generatedCode)}
+                    className="text-gray-400 hover:text-white transition-colors text-xs px-2 py-1 rounded bg-gray-600/50 hover:bg-gray-600"
+                    title="Copy code"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    onClick={() => setGeneratedCode('')}
+                    className="text-gray-400 hover:text-white transition-colors"
+                    title="Clear code"
+                  >
+                    <Square className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-              <div className="p-4">
-                <pre className="text-sm text-gray-300 overflow-x-auto">
+              <div className="p-4 max-h-96 overflow-auto">
+                <pre className="text-sm text-gray-300 overflow-x-auto whitespace-pre-wrap">
                   <code>{generatedCode}</code>
                 </pre>
               </div>
@@ -478,13 +716,29 @@ export default defineConfig({
                 <div className="flex items-center gap-2">
                   <Eye className="w-4 h-4 text-gray-400" />
                   <span className="text-sm font-medium text-gray-300">Live Preview</span>
+                  {previewUrl && (
+                    <span className="text-xs text-green-400 bg-green-900/20 px-2 py-1 rounded">
+                      Live
+                    </span>
+                  )}
                 </div>
-                {isPreviewLoading && (
-                  <div className="flex items-center gap-2 text-blue-400">
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span className="text-xs">Starting server...</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  {isPreviewLoading && (
+                    <div className="flex items-center gap-2 text-blue-400">
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span className="text-xs">Starting server...</span>
+                    </div>
+                  )}
+                  {previewUrl && (
+                    <button
+                      onClick={() => window.open(previewUrl, '_blank')}
+                      className="text-gray-400 hover:text-white transition-colors text-xs px-2 py-1 rounded bg-gray-600/50 hover:bg-gray-600"
+                      title="Open in new tab"
+                    >
+                      Open
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="bg-white min-h-96 relative">
                 {isPreviewLoading ? (
@@ -496,9 +750,12 @@ export default defineConfig({
                       <h3 className="text-lg font-semibold text-gray-900 mb-2">
                         Starting Preview...
                       </h3>
-                      <p className="text-gray-600">
+                      <p className="text-gray-600 mb-2">
                         Installing dependencies and starting dev server
                       </p>
+                      <div className="text-xs text-gray-500">
+                        WebContainer: {isWebContainerReady ? 'Ready' : 'Initializing...'}
+                      </div>
                     </div>
                   </div>
                 ) : previewUrl ? (
@@ -506,6 +763,7 @@ export default defineConfig({
                     src={previewUrl}
                     className="w-full h-96 border-0"
                     title="Live Preview"
+                    onError={() => console.error('Preview iframe failed to load')}
                   />
                 ) : (
                   <div className="flex items-center justify-center h-96">
@@ -517,14 +775,22 @@ export default defineConfig({
                         Preview Ready
                       </h3>
                       <p className="text-gray-600 mb-4">
-                        Your MVP will appear here once generated
+                        Your MVP will appear here once the server starts
                       </p>
-                      <button
-                        onClick={handleDownload}
-                        className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                      >
-                        Download Code
-                      </button>
+                      <div className="flex gap-2 justify-center">
+                        <button
+                          onClick={handleDownload}
+                          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                        >
+                          Download Code
+                        </button>
+                        {!isWebContainerReady && (
+                          <div className="text-xs text-gray-500 flex items-center gap-1">
+                            <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+                            Waiting for WebContainer...
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}

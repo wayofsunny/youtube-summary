@@ -1,17 +1,49 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Wand2 } from 'lucide-react';
-import axios from "axios";
-import { BACKEND_URL } from '../config';
+import { Wand2, AlertCircle } from 'lucide-react';
 
 export function Home() {
   const [prompt, setPrompt] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const validatePrompt = (prompt: string): { isValid: boolean; message?: string } => {
+    if (!prompt.trim()) {
+      return { isValid: false, message: 'Please describe your website idea' };
+    }
+    
+    if (prompt.trim().length < 10) {
+      return { isValid: false, message: 'Please provide a more detailed description (at least 10 characters)' };
+    }
+    
+    if (prompt.trim().length > 1000) {
+      return { isValid: false, message: 'Description is too long (maximum 1000 characters)' };
+    }
+    
+    return { isValid: true };
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (prompt.trim()) {
-      navigate('/builder', { state: { prompt } });
+    setError(null);
+    
+    const validation = validatePrompt(prompt);
+    if (!validation.isValid) {
+      setError(validation.message || 'Invalid input');
+      return;
+    }
+    
+    setIsSubmitting(true);
+    
+    try {
+      // Small delay to show loading state
+      await new Promise(resolve => setTimeout(resolve, 500));
+      navigate('/builder', { state: { prompt: prompt.trim() } });
+    } catch (error) {
+      setError('Failed to start builder. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -32,17 +64,56 @@ export function Home() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="bg-gray-800 rounded-lg shadow-lg p-6">
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe the website you want to build..."
-              className="w-full h-32 p-4 bg-gray-900 text-gray-100 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none placeholder-gray-500"
-            />
+            {/* Error Display */}
+            {error && (
+              <div className="mb-4 bg-red-900/20 border border-red-500/30 rounded-lg p-3">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-400" />
+                  <p className="text-red-200 text-sm">{error}</p>
+                </div>
+              </div>
+            )}
+            
+            <div className="relative">
+              <textarea
+                value={prompt}
+                onChange={(e) => {
+                  setPrompt(e.target.value);
+                  setError(null); // Clear error when user types
+                }}
+                placeholder="Describe the website you want to build..."
+                className={`w-full h-32 p-4 bg-gray-900 text-gray-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none placeholder-gray-500 ${
+                  error ? 'border-red-500' : 'border-gray-700'
+                }`}
+                maxLength={1000}
+                disabled={isSubmitting}
+              />
+              
+              {/* Character Counter */}
+              <div className="absolute bottom-2 right-2 text-xs text-gray-500">
+                {prompt.length}/1000
+              </div>
+            </div>
+            
             <button
               type="submit"
-              className="w-full mt-4 bg-blue-600 text-gray-100 py-3 px-6 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+              disabled={!prompt.trim() || isSubmitting || prompt.trim().length < 10}
+              className={`w-full mt-4 py-3 px-6 rounded-lg font-medium transition-colors ${
+                !prompt.trim() || prompt.trim().length < 10
+                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                  : isSubmitting
+                  ? 'bg-blue-600 text-gray-100'
+                  : 'bg-blue-600 text-gray-100 hover:bg-blue-700'
+              }`}
             >
-              Generate Website Plan
+              {isSubmitting ? (
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Starting Builder...
+                </div>
+              ) : (
+                'Generate Website Plan'
+              )}
             </button>
           </div>
         </form>

@@ -5,26 +5,40 @@ import { basePrompt as nodeBasePrompt } from './defaults/node';
 import { basePrompt as reactBasePrompt } from './defaults/react';
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY || 'dummy-key-for-testing',
 });
 
-function extractReactCode(response: string): string {
-  // Try to extract code from markdown code blocks
-  const codeBlockMatch = response.match(/```(?:jsx?|tsx?|javascript|typescript)?\n([\s\S]*?)\n```/);
-  if (codeBlockMatch) {
-    return codeBlockMatch[1].trim();
-  }
-  
-  // If no code block found, return the response as is
-  return response;
-}
 
 export async function POST(request: NextRequest) {
   try {
     const { type, prompt, messages } = await request.json();
+    
+    // Validate request body
+    if (!type) {
+      return NextResponse.json(
+        { error: 'Missing required field: type' },
+        { status: 400 }
+      );
+    }
+    
+    // Check if OpenAI API key is configured
+    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'dummy-key-for-testing') {
+      return NextResponse.json(
+        { error: 'OpenAI API key not configured. Please set OPENAI_API_KEY environment variable.' },
+        { status: 500 }
+      );
+    }
 
     if (type === 'template') {
-      // Determine if project should be React or Node.js
+      // Validate prompt for template request
+      if (!prompt || typeof prompt !== 'string') {
+        return NextResponse.json(
+          { error: 'Missing or invalid prompt for template request' },
+          { status: 400 }
+        );
+      }
+
+      // Determine if project should be React or Node.js using OpenAI
       const response = await openai.chat.completions.create({
         messages: [
           {
@@ -46,7 +60,7 @@ export async function POST(request: NextRequest) {
       if (answer === 'react') {
         return NextResponse.json({
           prompts: [
-            BASE_PROMPT,
+            BASE_PROMPT, 
             `Here is an artifact that contains all files of the project visible to you.\nConsider the contents of ALL files in the project.\n\n${reactBasePrompt}\n\nHere is a list of files that exist on the file system but are not being shown to you:\n\n  - .gitignore\n  - package-lock.json\n`
           ],
           uiPrompts: [reactBasePrompt]
@@ -56,7 +70,8 @@ export async function POST(request: NextRequest) {
       if (answer === 'node') {
         return NextResponse.json({
           prompts: [
-            `Here is an artifact that contains all files of the project visible to you.\nConsider the contents of ALL files in the project.\n\n${reactBasePrompt}\n\nHere is a list of files that exist on the file system but are not being shown to you:\n\n  - .gitignore\n  - package-lock.json\n`
+            BASE_PROMPT,
+            `Here is an artifact that contains all files of the project visible to you.\nConsider the contents of ALL files in the project.\n\n${nodeBasePrompt}\n\nHere is a list of files that exist on the file system but are not being shown to you:\n\n  - .gitignore\n  - package-lock.json\n`
           ],
           uiPrompts: [nodeBasePrompt]
         });
@@ -69,7 +84,25 @@ export async function POST(request: NextRequest) {
     }
 
     if (type === 'chat') {
-      // Handle chat messages
+      // Validate messages for chat request
+      if (!messages || !Array.isArray(messages)) {
+        return NextResponse.json(
+          { error: 'Missing or invalid messages for chat request' },
+          { status: 400 }
+        );
+      }
+
+      // Validate message format
+      for (const msg of messages) {
+        if (!msg.role || !msg.content || !['user', 'assistant'].includes(msg.role)) {
+          return NextResponse.json(
+            { error: 'Invalid message format. Each message must have role (user|assistant) and content' },
+            { status: 400 }
+          );
+        }
+      }
+
+      // Handle chat messages using OpenAI
       const systemPrompt = getSystemPrompt();
       const openaiMessages = [
         {
@@ -91,11 +124,8 @@ export async function POST(request: NextRequest) {
 
       const aiResponse = response.choices[0]?.message?.content || 'No response generated';
       
-      // Extract React component code from the response
-      const reactCode = extractReactCode(aiResponse);
-      
       return NextResponse.json({
-        response: reactCode
+        response: aiResponse
       });
     }
 
@@ -106,6 +136,29 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('MVP Builder API error:', error);
+    
+    // Handle specific OpenAI API errors
+    if (error instanceof Error) {
+      if (error.message.includes('API key')) {
+        return NextResponse.json(
+          { error: 'Invalid OpenAI API key' },
+          { status: 401 }
+        );
+      }
+      if (error.message.includes('rate limit')) {
+        return NextResponse.json(
+          { error: 'OpenAI API rate limit exceeded. Please try again later.' },
+          { status: 429 }
+        );
+      }
+      if (error.message.includes('quota')) {
+        return NextResponse.json(
+          { error: 'OpenAI API quota exceeded. Please check your billing.' },
+          { status: 402 }
+        );
+      }
+    }
+    
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

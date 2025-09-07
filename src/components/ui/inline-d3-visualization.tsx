@@ -222,26 +222,26 @@ export const InlineD3Visualization: React.FC<InlineD3VisualizationProps> = ({ da
   // Create enhanced pie chart
   useEffect(() => {
     if (activeTab === 'pie' && visualizationData.pieChart && pieRef.current) {
-      const svg = d3.select(pieRef.current);
-      svg.selectAll("*").remove();
+    const svg = d3.select(pieRef.current);
+    svg.selectAll("*").remove();
 
-      const width = 400;
-      const height = 400;
+    const width = 400;
+    const height = 400;
       const radius = Math.min(width, height) / 2 - 40;
 
-      const g = svg
-        .attr("width", width)
-        .attr("height", height)
-        .append("g")
-        .attr("transform", `translate(${width / 2}, ${height / 2})`);
+    const g = svg
+      .attr("width", width)
+      .attr("height", height)
+      .append("g")
+      .attr("transform", `translate(${width / 2}, ${height / 2})`);
 
-      const pie = d3.pie<DataPoint>()
-        .value(d => d.value)
-        .sort(null);
+    const pie = d3.pie<DataPoint>()
+      .value(d => d.value)
+      .sort(null);
 
-      const arc = d3.arc<d3.PieArcDatum<DataPoint>>()
-        .innerRadius(0)
-        .outerRadius(radius);
+    const arc = d3.arc<d3.PieArcDatum<DataPoint>>()
+      .innerRadius(0)
+      .outerRadius(radius);
 
       const outerArc = d3.arc<d3.PieArcDatum<DataPoint>>()
         .innerRadius(radius * 0.9)
@@ -251,15 +251,15 @@ export const InlineD3Visualization: React.FC<InlineD3VisualizationProps> = ({ da
         .innerRadius(radius + 20)
         .outerRadius(radius + 20);
 
-      const arcs = g.selectAll(".arc")
-        .data(pie(visualizationData.pieChart))
-        .enter()
-        .append("g")
-        .attr("class", "arc");
+    const arcs = g.selectAll(".arc")
+      .data(pie(visualizationData.pieChart))
+      .enter()
+      .append("g")
+      .attr("class", "arc");
 
       // Add pie slices
-      arcs.append("path")
-        .attr("d", arc)
+    arcs.append("path")
+      .attr("d", arc)
         .attr("fill", d => d.data.color || colorPalette[0])
         .style("opacity", 0.8)
         .style("cursor", "pointer")
@@ -297,12 +297,12 @@ export const InlineD3Visualization: React.FC<InlineD3VisualizationProps> = ({ da
         });
 
       // Add percentage labels on slices
-      arcs.append("text")
+    arcs.append("text")
         .attr("transform", d => {
           const pos = arc.centroid(d);
           return `translate(${pos[0]}, ${pos[1]})`;
         })
-        .attr("text-anchor", "middle")
+      .attr("text-anchor", "middle")
         .style("font-size", "12px")
         .style("fill", "white")
         .style("font-weight", "bold")
@@ -341,39 +341,39 @@ export const InlineD3Visualization: React.FC<InlineD3VisualizationProps> = ({ da
   // Create bar chart with enhanced features
   useEffect(() => {
     if (activeTab === 'bar' && visualizationData.barChart && barRef.current) {
-      const svg = d3.select(barRef.current);
-      svg.selectAll("*").remove();
+    const svg = d3.select(barRef.current);
+    svg.selectAll("*").remove();
 
       const width = 500;
       const height = 350;
       const margin = { top: 40, right: 40, bottom: 80, left: 80 };
 
-      const g = svg
-        .attr("width", width)
-        .attr("height", height)
-        .append("g")
-        .attr("transform", `translate(${margin.left}, ${margin.top})`);
+    const g = svg
+      .attr("width", width)
+      .attr("height", height)
+      .append("g")
+      .attr("transform", `translate(${margin.left}, ${margin.top})`);
 
       // Create scales
-      const xScale = d3.scaleBand()
-        .domain(visualizationData.barChart.map(d => d.label))
-        .range([0, width - margin.left - margin.right])
-        .padding(0.1);
+    const xScale = d3.scaleBand()
+      .domain(visualizationData.barChart.map(d => d.label))
+      .range([0, width - margin.left - margin.right])
+      .padding(0.1);
 
-      const yScale = d3.scaleLinear()
-        .domain([0, d3.max(visualizationData.barChart, d => d.value) || 0])
-        .range([height - margin.top - margin.bottom, 0]);
+    const yScale = d3.scaleLinear()
+      .domain([0, d3.max(visualizationData.barChart, d => d.value) || 0])
+      .range([height - margin.top - margin.bottom, 0]);
 
       // Add bars with enhanced styling
-      g.selectAll(".bar")
-        .data(visualizationData.barChart)
-        .enter()
-        .append("rect")
-        .attr("class", "bar")
-        .attr("x", d => xScale(d.label) || 0)
+    g.selectAll(".bar")
+      .data(visualizationData.barChart)
+      .enter()
+      .append("rect")
+      .attr("class", "bar")
+      .attr("x", d => xScale(d.label) || 0)
         .attr("width", xScale.bandwidth())
-        .attr("y", d => yScale(d.value))
-        .attr("height", d => height - margin.top - margin.bottom - yScale(d.value))
+      .attr("y", d => yScale(d.value))
+      .attr("height", d => height - margin.top - margin.bottom - yScale(d.value))
         .attr("fill", d => d.color || colorPalette[0])
         .style("opacity", 0.8)
         .style("cursor", "pointer")
@@ -407,14 +407,14 @@ export const InlineD3Visualization: React.FC<InlineD3VisualizationProps> = ({ da
         });
 
       // Add value labels on top of bars
-      g.selectAll(".bar-label")
-        .data(visualizationData.barChart)
-        .enter()
-        .append("text")
-        .attr("class", "bar-label")
-        .attr("x", d => (xScale(d.label) || 0) + xScale.bandwidth() / 2)
-        .attr("y", d => yScale(d.value) - 5)
-        .attr("text-anchor", "middle")
+    g.selectAll(".bar-label")
+      .data(visualizationData.barChart)
+      .enter()
+      .append("text")
+      .attr("class", "bar-label")
+      .attr("x", d => (xScale(d.label) || 0) + xScale.bandwidth() / 2)
+      .attr("y", d => yScale(d.value) - 5)
+      .attr("text-anchor", "middle")
         .style("font-size", "11px")
         .style("fill", "white")
         .style("font-weight", "500")
@@ -509,7 +509,7 @@ export const InlineD3Visualization: React.FC<InlineD3VisualizationProps> = ({ da
         yPosition += 10;
         
         // Table headers
-        const headers = Object.keys(visualizationData.table[0] || {});
+    const headers = Object.keys(visualizationData.table[0] || {});
         const colWidth = (pageWidth - 40) / headers.length;
         
         pdf.setFontSize(10);
@@ -710,14 +710,14 @@ export const InlineD3Visualization: React.FC<InlineD3VisualizationProps> = ({ da
           >
             <Download className="w-4 h-4" />
           </button>
-          {onClose && (
-            <button
-              onClick={onClose}
+        {onClose && (
+          <button
+            onClick={onClose}
               className="p-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white transition-colors"
-            >
+          >
               <X className="w-4 h-4" />
-            </button>
-          )}
+          </button>
+        )}
         </div>
       </div>
 
