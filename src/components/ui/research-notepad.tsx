@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Download, Trash, StickyNote, Share, FileText, Save, Bold, Italic, List, Type, Highlighter, AlignLeft, AlignCenter, AlignRight, BarChart3, PieChart, Table, Scissors } from "lucide-react";
+import { X, Download, Trash, StickyNote, Share, FileText, Save, Bold, Italic, List, Type, Highlighter, AlignLeft, AlignCenter, AlignRight, BarChart3, PieChart, Table, Scissors, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StructuredContentRenderer } from "./structured-content-renderer";
+import { VizBlock } from "./viz-block";
 // PDF libraries - will be available after npm install
 let jsPDF: any = null;
 let html2canvas: any = null;
@@ -28,12 +29,37 @@ type ResearchNotepadProps = {
  * - Clears via `new-research` event and supports Export (download txt)
  * - Persists content in localStorage (no backend required)
  */
+interface Suggestion {
+  id: string;
+  kind: 'visualization' | 'rewrite';
+  title: string;
+  spec?: any;
+  data?: any[];
+  replacement?: string;
+  rationale: string;
+  confidence: number;
+}
+
+interface VizBlockData {
+  id: string;
+  type: 'bar' | 'pie' | 'line' | 'area' | 'table';
+  title: string;
+  data: any[];
+  spec?: any;
+  originalText: string;
+  startOffset: number;
+  endOffset: number;
+}
+
 export function ResearchNotepad({ className, storageKey = "research_notepad_content" }: ResearchNotepadProps) {
   const [open, setOpen] = useState(false);
   const [content, setContent] = useState("");
   const [title, setTitle] = useState("");
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isStructuredMode, setIsStructuredMode] = useState(false);
+  const [isNapkinMode, setIsNapkinMode] = useState(false);
+  const [vizBlocks, setVizBlocks] = useState<VizBlockData[]>([]);
+  const [hoveredParagraph, setHoveredParagraph] = useState<{ text: string; index: number } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
 
@@ -61,6 +87,107 @@ export function ResearchNotepad({ className, storageKey = "research_notepad_cont
   const processAndStructureContent = useCallback((rawContent: string): string => {
     return `\n\n${rawContent}\n`;
   }, []);
+
+  // Napkin AI analysis function
+  const analyzeText = useCallback(async (text: string): Promise<Suggestion[]> => {
+    try {
+      const isMockMode = typeof window !== 'undefined' && 
+        new URLSearchParams(window.location.search).get('mock') === '1';
+      
+      const url = isMockMode ? '/api/analyze?mock=1' : '/api/analyze';
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          selectionText: text
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Analysis failed: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.suggestions || [];
+    } catch (error) {
+      console.error('Analysis error:', error);
+      // Return mock suggestions as fallback
+      return [
+        {
+          id: 'mock-1',
+          kind: 'visualization',
+          title: 'Data Visualization',
+          spec: { type: 'bar' },
+          data: [
+            { label: 'Sample 1', value: 100 },
+            { label: 'Sample 2', value: 150 },
+            { label: 'Sample 3', value: 200 }
+          ],
+          rationale: 'Mock visualization for testing',
+          confidence: 0.8
+        }
+      ];
+    }
+  }, []);
+
+  // Convert suggestion to Viz Block
+  const insertVizBlock = useCallback((suggestion: Suggestion, originalText: string) => {
+    const newVizBlock: VizBlockData = {
+      id: `viz-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      type: getChartType(suggestion),
+      title: suggestion.title,
+      data: suggestion.data || [],
+      spec: suggestion.spec,
+      originalText: originalText,
+      startOffset: 0,
+      endOffset: originalText.length
+    };
+
+    setVizBlocks(prev => [...prev, newVizBlock]);
+  }, []);
+
+  // Get chart type from suggestion
+  const getChartType = useCallback((suggestion: Suggestion): 'bar' | 'pie' | 'line' | 'area' | 'table' => {
+    if (suggestion.kind === 'rewrite') return 'table';
+    
+    const spec = suggestion.spec;
+    if (spec?.type === 'pie') return 'pie';
+    if (spec?.type === 'line') return 'line';
+    if (spec?.type === 'area') return 'area';
+    if (spec?.type === 'table') return 'table';
+    
+    return 'bar';
+  }, []);
+
+  // Handle paragraph hover
+  const handleParagraphHover = useCallback((text: string, index: number) => {
+    if (text.length > 20 && (/\d/.test(text) || /\$/.test(text) || /%/.test(text))) {
+      setHoveredParagraph({ text, index });
+    }
+  }, []);
+
+  const handleParagraphLeave = useCallback(() => {
+    setHoveredParagraph(null);
+  }, []);
+
+  // Handle convert button click
+  const handleConvertParagraph = useCallback(async (text: string, index: number) => {
+    try {
+      const suggestions = await analyzeText(text);
+      if (suggestions.length > 0) {
+        insertVizBlock(suggestions[0], text);
+        // Remove the original paragraph from content
+        const paragraphs = content.split('\n\n');
+        paragraphs.splice(index, 1);
+        setContent(paragraphs.join('\n\n'));
+      }
+    } catch (error) {
+      console.error('Conversion error:', error);
+    }
+  }, [content, analyzeText, insertVizBlock]);
 
   // Function to clean up timestamp lines and structured data from content
   const cleanTimestampLines = useCallback((content: string): string => {
@@ -704,6 +831,19 @@ ${content}
             {isStructuredMode ? "Text" : "Charts"}
           </button>
         )}
+
+        <button
+          onClick={() => setIsNapkinMode(!isNapkinMode)}
+          className={`px-2 py-1 rounded text-xs transition-colors flex items-center gap-1 ${
+            isNapkinMode 
+              ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" 
+              : "bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] text-white/80"
+          }`}
+          title="Toggle Napkin AI Mode - Hover over paragraphs to convert to charts"
+        >
+          <Sparkles className="w-3 h-3" />
+          {isNapkinMode ? "Text" : "Napkin AI"}
+        </button>
         
         {!hasStructuredData && content && (content.includes(':') || content.includes('|') || content.includes('%')) && (
           <button
@@ -732,7 +872,7 @@ ${content}
         </button>
       </div>
     </div>
-  ), [title, exportPDF, insertFormatting, togglePreview, isPreviewMode, hasStructuredData, toggleStructuredMode, isStructuredMode, content, processAndStructureContent]);
+  ), [title, exportPDF, insertFormatting, togglePreview, isPreviewMode, hasStructuredData, toggleStructuredMode, isStructuredMode, content, processAndStructureContent, isNapkinMode]);
 
   return (
     <AnimatePresence>
@@ -755,6 +895,76 @@ ${content}
               <div className="w-full h-full overflow-y-auto">
                 <StructuredContentRenderer content={content} />
               </div>
+            ) : isNapkinMode ? (
+              <div className="w-full h-full p-4 overflow-y-auto">
+                {/* Napkin AI Mode - Paragraphs with hover-to-convert */}
+                <div className="space-y-4">
+                  {content.split('\n\n').map((paragraph, index) => {
+                    if (!paragraph.trim()) return null;
+                    
+                    const isHovered = hoveredParagraph?.index === index;
+                    const hasData = paragraph.length > 20 && (/\d/.test(paragraph) || /\$/.test(paragraph) || /%/.test(paragraph));
+                    
+                    return (
+                      <div
+                        key={index}
+                        className={`relative group p-3 rounded-lg transition-all duration-200 ${
+                          hasData 
+                            ? 'hover:bg-gray-700/30 cursor-pointer border border-transparent hover:border-gray-600' 
+                            : 'bg-gray-800/20'
+                        }`}
+                        onMouseEnter={() => hasData && handleParagraphHover(paragraph, index)}
+                        onMouseLeave={handleParagraphLeave}
+                      >
+                        <div className="text-white/90 text-sm leading-relaxed whitespace-pre-wrap">
+                          {paragraph}
+                        </div>
+                        
+                        {/* Convert Button - appears on hover for data-rich paragraphs */}
+                        {isHovered && hasData && (
+                          <motion.button
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="absolute top-2 right-2 bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded-lg text-xs font-medium flex items-center gap-1 shadow-lg"
+                            onClick={() => handleConvertParagraph(paragraph, index)}
+                          >
+                            <Sparkles className="w-3 h-3" />
+                            Convert
+                          </motion.button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  
+                  {/* Viz Blocks */}
+                  <AnimatePresence>
+                    {vizBlocks.map((block) => (
+                      <VizBlock
+                        key={block.id}
+                        id={block.id}
+                        type={block.type}
+                        title={block.title}
+                        data={block.data}
+                        spec={block.spec}
+                        originalText={block.originalText}
+                        onEdit={() => console.log('Edit viz block:', block.id)}
+                        onConvert={(id, newType) => {
+                          setVizBlocks(prev => prev.map(b => 
+                            b.id === id ? { ...b, type: newType as any } : b
+                          ));
+                        }}
+                        onRestore={(id) => {
+                          const block = vizBlocks.find(b => b.id === id);
+                          if (block) {
+                            setContent(prev => prev + '\n\n' + block.originalText);
+                            setVizBlocks(prev => prev.filter(b => b.id !== id));
+                          }
+                        }}
+                      />
+                    ))}
+                  </AnimatePresence>
+                </div>
+              </div>
             ) : isPreviewMode ? (
               <div 
                 ref={editorRef}
@@ -774,10 +984,10 @@ ${content}
           <div className="p-2 border-t border-white/[0.08] text-[10px] text-white/40 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <span>Autosaved locally</span>
-              {!isPreviewMode && !isStructuredMode && (
+              {!isPreviewMode && !isStructuredMode && !isNapkinMode && (
                 <span className="text-white/30">•</span>
               )}
-              {!isPreviewMode && !isStructuredMode && (
+              {!isPreviewMode && !isStructuredMode && !isNapkinMode && (
                 <span>Use toolbar or Ctrl+B/I for formatting</span>
               )}
               {isStructuredMode && (
@@ -785,6 +995,12 @@ ${content}
               )}
               {isStructuredMode && (
                 <span className="text-green-400">Structured view with D3.js visualizations</span>
+              )}
+              {isNapkinMode && (
+                <span className="text-purple-400">•</span>
+              )}
+              {isNapkinMode && (
+                <span className="text-purple-400">Hover over paragraphs to convert to charts</span>
               )}
             </div>
             <span>{new Date().toLocaleTimeString()}</span>

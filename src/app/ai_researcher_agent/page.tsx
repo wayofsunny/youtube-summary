@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, Bot, Lightbulb, Target, TrendingUp, Users, Building2, Zap, Copy, Table, BarChart3, PieChart, X } from "lucide-react";
 import { ExpandableDocsSidebar } from "@/components/ui/expandable-docs-sidebar";
-import { ResearchQuestionsModal } from "@/components/ui/research-questions-modal";
+import { InlineD3Visualization } from "@/components/ui/inline-d3-visualization";
+import { NapkinAIResearch } from "@/components/ui/napkin-ai-research";
 // PDF libraries - will be available after npm install
 let jsPDF: any = null;
 let html2canvas: any = null;
@@ -224,14 +225,14 @@ export default function AIResearcherAgent() {
   const [loading, setLoading] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
   const [researchResults, setResearchResults] = useState<string>("");
+  
+  // Debug function to track research results changes
+  const debugSetResearchResults = (value: string | ((prev: string) => string)) => {
+    console.log('setResearchResults called with:', typeof value === 'function' ? 'function' : value?.substring(0, 100) + '...');
+    setResearchResults(value);
+  };
   const [showResults, setShowResults] = useState(false);
   const [researchData, setResearchData] = useState<any>(null);
-  const [researchPreferences, setResearchPreferences] = useState({
-    industry: '',
-    focus: '',
-    depth: 'comprehensive',
-    preserveTables: true // New option to preserve tabular data
-  });
   const [generatingMore, setGeneratingMore] = useState(false);
   const [additionalResearchData, setAdditionalResearchData] = useState<any>(null);
   const [lastAutoLoadTime, setLastAutoLoadTime] = useState<number>(0);
@@ -242,30 +243,124 @@ export default function AIResearcherAgent() {
   const [retryCount, setRetryCount] = useState(0);
   const [copiedParagraphs, setCopiedParagraphs] = useState<Set<number>>(new Set());
   const [structuredParagraphs, setStructuredParagraphs] = useState<Set<number>>(new Set());
-  const [showResearchModal, setShowResearchModal] = useState(false);
   const [activeChartParagraph, setActiveChartParagraph] = useState<number | null>(null);
   const [chartData, setChartData] = useState<any>(null);
+  const [activeVisualizationParagraphs, setActiveVisualizationParagraphs] = useState<Set<number>>(new Set());
+  const [visualizationData, setVisualizationData] = useState<Map<number, string>>(new Map());
   
-  // Debug modal state changes
-  useEffect(() => {
-    console.log('Research modal state changed:', showResearchModal);
-  }, [showResearchModal]);
+  // Function to close all visualizations
+  const closeAllVisualizations = () => {
+    setActiveVisualizationParagraphs(new Set());
+  };
+  
+  // Function to close a specific visualization
+  const closeVisualization = (paragraphIndex: number) => {
+    setActiveVisualizationParagraphs(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(paragraphIndex);
+      return newSet;
+    });
+  };
+  const [useNapkinAI, setUseNapkinAI] = useState(false);
+  const [estimatedTime, setEstimatedTime] = useState<number | null>(null);
+  const [showTimer, setShowTimer] = useState(false);
+  const [timerCountdown, setTimerCountdown] = useState<number>(0);
+  
   const resultsRef = useRef<HTMLDivElement>(null);
 
-  // Auto-open research modal when component mounts
+  // Timer effect for countdown during research
   useEffect(() => {
-    console.log('Component mounted, setting up auto-open timer');
-    const timer = setTimeout(() => {
-      console.log('Auto-opening research modal');
-      setShowResearchModal(true);
-    }, 1000); // Increased delay to ensure component is fully mounted
+    let interval: NodeJS.Timeout;
     
-    return () => clearTimeout(timer);
-  }, []);
+    if (showTimer && timerCountdown > 0 && loading) {
+      interval = setInterval(() => {
+        setTimerCountdown(prev => {
+          if (prev <= 1) {
+            setShowTimer(false);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [showTimer, timerCountdown, loading]);
+
+  // Function to calculate estimated research time based on query complexity
+  const calculateEstimatedTime = (query: string): number => {
+    const baseTime = 240; // Base time in seconds (4 minutes)
+    const wordCount = query.split(/\s+/).length;
+    const complexityFactors = {
+      // Industry-specific terms that require more research
+      industryTerms: ['market', 'industry', 'competition', 'competitive', 'analysis', 'trends', 'growth', 'revenue', 'funding', 'investment'],
+      // Technical terms that need deeper analysis
+      technicalTerms: ['technology', 'AI', 'machine learning', 'blockchain', 'fintech', 'SaaS', 'platform', 'API', 'software'],
+      // Business model terms
+      businessTerms: ['business model', 'strategy', 'pricing', 'customer', 'segmentation', 'value proposition', 'partnership'],
+      // Financial terms
+      financialTerms: ['valuation', 'funding', 'investment', 'revenue', 'profit', 'cost', 'pricing', 'financial']
+    };
+
+    let complexityScore = 0;
+    
+    // Check for complexity factors
+    Object.values(complexityFactors).forEach(terms => {
+      terms.forEach(term => {
+        if (query.toLowerCase().includes(term.toLowerCase())) {
+          complexityScore += 1;
+        }
+      });
+    });
+
+    // Calculate time based on word count and complexity
+    const wordTime = Math.min(wordCount * 2, 30); // Max 30 seconds for word count
+    const complexityTime = Math.min(complexityScore * 5, 60); // Max 60 seconds for complexity
+    
+    // Add time for specific research types
+    let researchTypeTime = 0;
+    if (query.toLowerCase().includes('startup') || query.toLowerCase().includes('company')) {
+      researchTypeTime += 15;
+    }
+    if (query.toLowerCase().includes('market analysis') || query.toLowerCase().includes('competitive')) {
+      researchTypeTime += 25;
+    }
+    if (query.toLowerCase().includes('funding') || query.toLowerCase().includes('investment')) {
+      researchTypeTime += 20;
+    }
+
+    const totalTime = baseTime + wordTime + complexityTime + researchTypeTime;
+    
+    // Ensure time is between 4-5 minutes (240-300 seconds)
+    const minTime = 240; // 4 minutes
+    const maxTime = 300; // 5 minutes
+    
+    return Math.min(Math.max(Math.round(totalTime), minTime), maxTime);
+  };
+
+  // Function to format time estimation for display
+  const formatTimeEstimation = (seconds: number): string => {
+    if (seconds < 60) {
+      return `${seconds} seconds`;
+    } else {
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = seconds % 60;
+      if (remainingSeconds === 0) {
+        return `${minutes} minute${minutes > 1 ? 's' : ''}`;
+      } else {
+        return `${minutes}m ${remainingSeconds}s`;
+      }
+    }
+  };
 
   // Generate more content when button is clicked
   const handleAutoLoad = async () => {
-    if (isAutoLoading || !researchData) return;
+    console.log('handleAutoLoad called', { isAutoLoading, hasResearchData: !!researchData, showResults });
+    if (isAutoLoading || !researchData || !showResults) return;
     
     const now = Date.now();
     const timeSinceLastLoad = now - lastAutoLoadTime;
@@ -282,14 +377,7 @@ export default function AIResearcherAgent() {
     
     try {
       // Enhanced query for additional research with more detailed focus
-      let enhancedQuery = `DEEP DIVE ADDITIONAL RESEARCH for: ${query}\n\n`;
-      if (researchPreferences.industry || researchPreferences.focus || researchPreferences.depth) {
-        enhancedQuery += 'Research Preferences:\n';
-        if (researchPreferences.industry) enhancedQuery += `- Industry: ${researchPreferences.industry}\n`;
-        if (researchPreferences.focus) enhancedQuery += `- Focus: ${researchPreferences.focus}\n`;
-        if (researchPreferences.depth) enhancedQuery += `- Depth: ${researchPreferences.depth}\n`;
-      }
-      enhancedQuery += `\nPlease provide EXTREMELY DETAILED additional research including:
+      let enhancedQuery = `DEEP DIVE ADDITIONAL RESEARCH for: ${query}\n\nPlease provide EXTREMELY DETAILED additional research including:
 
 1. COMPREHENSIVE MARKET ANALYSIS:
    - Recent market shifts and emerging opportunities (last 6 months)
@@ -341,7 +429,7 @@ Focus on providing EXTREMELY DETAILED, DATA-RICH insights with specific numbers,
           originalQuery: query,
           generateArticleSummaries: true,
           numSummaries: 12, // Generate 12 detailed article summaries
-          preserveTables: researchPreferences.preserveTables
+          preserveTables: true
         }),
       });
 
@@ -389,7 +477,13 @@ Focus on providing EXTREMELY DETAILED, DATA-RICH insights with specific numbers,
         });
       }
       
-      setResearchResults(prev => prev + additionalContent);
+      // Only append to results if we have existing results
+      if (researchResults) {
+        debugSetResearchResults(prev => prev + additionalContent);
+      } else {
+        console.warn('Auto-load attempted but no main results found');
+        return;
+      }
       
       // Smooth scroll to show new content
       // Scroll to results after successful research
@@ -409,7 +503,7 @@ Focus on providing EXTREMELY DETAILED, DATA-RICH insights with specific numbers,
       
       // Only add error to results if it's not a retryable error
       if (retryCount >= 2) {
-        setResearchResults(prev => prev + '\n\n' + '='.repeat(80) + '\n\n' + '❌ AUTO-LOAD RESEARCH FAILED: ' + (error.message || 'Unknown error occurred') + '\n\n' + 'Please try again or check your OpenAI API key configuration.');
+        debugSetResearchResults(prev => prev + '\n\n' + '='.repeat(80) + '\n\n' + '❌ AUTO-LOAD RESEARCH FAILED: ' + (error.message || 'Unknown error occurred') + '\n\n' + 'Please try again or check your OpenAI API key configuration.');
       }
     } finally {
       setIsAutoLoading(false);
@@ -424,38 +518,15 @@ Focus on providing EXTREMELY DETAILED, DATA-RICH insights with specific numbers,
     await handleAutoLoad();
   };
 
-  // Research modal handlers
-  const handleResearchModalComplete = (preferences: any) => {
-    console.log("Research preferences completed:", preferences);
-    setShowResearchModal(false);
-    // You can use these preferences to enhance the research query
-  };
-
-  const handleResearchModalClose = () => {
-    setShowResearchModal(false);
-  };
 
   // Function to export research results as PDF
   const exportResearchAsPDF = useCallback(async () => {
     if (!researchResults) return;
     
-    // Check if PDF libraries are available
-    if (!jsPDF || !html2canvas) {
-      console.log('PDF libraries not available, using text export fallback');
-      // Fallback to text export
-      const blob = new Blob([researchResults], { type: "text/plain;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = 'ai-research-' + query.replace(/[^a-z0-9-_]+/gi, "-").toLowerCase() + '.txt';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      return;
-    }
-    
     try {
+      // Dynamic import for PDF libraries
+      const { default: jsPDF } = await import('jspdf');
+      const { default: html2canvas } = await import('html2canvas');
       // Create a temporary container for the content
       const tempContainer = document.createElement('div');
       tempContainer.style.position = 'absolute';
@@ -531,16 +602,54 @@ Focus on providing EXTREMELY DETAILED, DATA-RICH insights with specific numbers,
       
     } catch (error) {
       console.error('Error generating PDF:', error);
-      // Fallback to text export
-      const blob = new Blob([researchResults], { type: "text/plain;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = 'ai-research-' + query.replace(/[^a-z0-9-_]+/gi, "-").toLowerCase() + '.txt';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Fallback to simple PDF generation without html2canvas
+      try {
+        const { default: jsPDF } = await import('jspdf');
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        let yPosition = 20;
+        
+        // Add title
+        pdf.setFontSize(20);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(`AI Research: ${query}`, pageWidth / 2, yPosition, { align: 'center' });
+        yPosition += 15;
+        
+        // Add timestamp
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, yPosition, { align: 'center' });
+        yPosition += 20;
+        
+        // Add content
+        pdf.setFontSize(12);
+        const lines = researchResults.split('\n');
+        lines.forEach((line, index) => {
+          if (yPosition > pageHeight - 20) {
+            pdf.addPage();
+            yPosition = 20;
+          }
+          pdf.text(line.substring(0, 80), 20, yPosition); // Limit line length
+          yPosition += 6;
+        });
+        
+        // Save PDF
+        const fileName = 'ai-research-' + query.replace(/[^a-z0-9-_]+/gi, "-").toLowerCase() + '.pdf';
+        pdf.save(fileName);
+      } catch (fallbackError) {
+        console.error('Fallback PDF generation failed:', fallbackError);
+        // Final fallback to text export
+        const blob = new Blob([researchResults], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = 'ai-research-' + query.replace(/[^a-z0-9-_]+/gi, "-").toLowerCase() + '.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
     }
   }, [researchResults, query]);
 
@@ -604,34 +713,25 @@ Focus on providing EXTREMELY DETAILED, DATA-RICH insights with specific numbers,
     }
     
     return chartData;
-  };
+   };
 
-  // Function to show data visualization inline on research page
+  // Function to show data visualization
   const openDataVisualization = (paragraphText: string, paragraphIndex: number) => {
-    // Detect semi-tabular patterns
-    const lines = paragraphText.split('\n').filter(line => line.trim());
-    const hasTablePatterns = lines.some(line => 
-      line.includes('|') || 
-      line.includes('Company') && line.includes('Revenue') ||
-      line.includes('Market') && line.includes('Growth') ||
-      line.includes('Funding') && line.includes('Amount') ||
-      line.includes('TAM') || line.includes('SAM') || line.includes('SOM') ||
-      line.match(/\d+%/) || line.match(/\$\d+/) ||
-      line.includes('•') && line.includes(':') ||
-      line.match(/^\s*[A-Z][a-z]+.*:.*\d/) // Pattern like "Company: Value"
-    );
-
-    if (!hasTablePatterns) {
-      alert('No structured data detected in this paragraph for visualization.');
-      return;
-    }
-
-    // Generate chart data from paragraph
-    const chartData = generateChartData(paragraphText);
+    console.log('Data visualization button clicked:', { paragraphIndex, paragraphText: paragraphText.substring(0, 100) });
     
-    // Set active chart for this paragraph
-    setActiveChartParagraph(paragraphIndex);
-    setChartData(chartData);
+    // Store the data for this paragraph
+    setVisualizationData(prev => {
+      const newMap = new Map(prev);
+      newMap.set(paragraphIndex, paragraphText);
+      return newMap;
+    });
+    
+    // Add this paragraph to the set of active visualizations
+    setActiveVisualizationParagraphs(prev => {
+      const newSet = new Set(prev);
+      newSet.add(paragraphIndex);
+      return newSet;
+    });
     
     // Mark as processed
     setStructuredParagraphs(prev => new Set([...prev, paragraphIndex]));
@@ -975,6 +1075,11 @@ Focus on providing EXTREMELY DETAILED, DATA-RICH insights with specific numbers,
   const handleResearch = async () => {
     if (!query.trim()) return;
     
+    // Calculate estimated time and start timer
+    const estimatedTimeSeconds = calculateEstimatedTime(query);
+    setEstimatedTime(estimatedTimeSeconds);
+    setTimerCountdown(estimatedTimeSeconds);
+    setShowTimer(true);
     setLoading(true);
     setShowResults(false);
     setAutoLoadCount(0); // Reset auto-load count for new research
@@ -982,14 +1087,8 @@ Focus on providing EXTREMELY DETAILED, DATA-RICH insights with specific numbers,
     setRetryCount(0); // Reset retry count
     
     try {
-      // Enhanced query based on preferences
+      // Use the original query without preferences
       let enhancedQuery = query;
-      if (researchPreferences.industry || researchPreferences.focus || researchPreferences.depth) {
-        enhancedQuery += '\n\nResearch Preferences:\n';
-        if (researchPreferences.industry) enhancedQuery += `- Industry: ${researchPreferences.industry}\n`;
-        if (researchPreferences.focus) enhancedQuery += `- Focus: ${researchPreferences.focus}\n`;
-        if (researchPreferences.depth) enhancedQuery += `- Depth: ${researchPreferences.depth}\n`;
-      }
       
       // Call the backend API with article summaries
       const response = await fetch('/api/ai-research', {
@@ -999,10 +1098,9 @@ Focus on providing EXTREMELY DETAILED, DATA-RICH insights with specific numbers,
         },
         body: JSON.stringify({ 
           query: enhancedQuery,
-          preferences: researchPreferences,
           generateArticleSummaries: true,
           numSummaries: 8, // Generate 8 article summaries for initial research
-          preserveTables: researchPreferences.preserveTables
+          preserveTables: true
         }),
       });
 
@@ -1043,7 +1141,9 @@ ${data.answer}
       }
 
       // Add YouTube videos if available
+      console.log('YouTube videos data:', data.youtubeVideos);
       if (data.youtubeVideos && data.youtubeVideos.length > 0) {
+        console.log('Adding YouTube videos to results:', data.youtubeVideos.length);
         formattedResults += '🎥 RELEVANT YOUTUBE VIDEOS (Sorted by View Count):\n\n';
         data.youtubeVideos
           .sort((a: any, b: any) => (b.viewCount || 0) - (a.viewCount || 0))
@@ -1054,16 +1154,23 @@ ${data.answer}
           formattedResults += `Link: ${video.link}\n\n`;
           formattedResults += '-'.repeat(80) + '\n\n';
         });
+      } else {
+        console.log('No YouTube videos found in response');
       }
 
       formattedResults += 'Generated by AI Research Agent - Startup Founder Assistant';
 
-      setResearchResults(formattedResults);
+      debugSetResearchResults(formattedResults);
       setShowResults(true);
+      
+      // Ensure auto-load doesn't interfere with main results
+      console.log('Research completed successfully, results set');
+      console.log('Research results length:', formattedResults.length);
+      console.log('Show results set to true');
     } catch (error: any) {
       console.error("Research failed:", error);
       // Show error to user
-      setResearchResults(`# Research Failed
+      debugSetResearchResults(`# Research Failed
 
 Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}
 
@@ -1071,6 +1178,11 @@ Please try again or check your OpenAI API key configuration.`);
       setShowResults(true);
     } finally {
       setLoading(false);
+      setShowTimer(false);
+      // Ensure results remain visible after loading completes
+      if (researchResults) {
+        setShowResults(true);
+      }
     }
   };
 
@@ -1159,119 +1271,6 @@ Please try again or check your OpenAI API key configuration.`);
               </div>
 
               <div className="relative z-10 w-full min-h-0">
-                {/* Research Preferences */}
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1, duration: 0.6 }}
-                  className="mb-6"
-                >
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-white/80 mb-2">
-                        Industry Focus
-                      </label>
-                      <select
-                        value={researchPreferences.industry}
-                        onChange={(e) => setResearchPreferences(prev => ({ ...prev, industry: e.target.value }))}
-                        className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.1] rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/30 backdrop-blur-sm"
-                        style={{ colorScheme: 'dark' }}
-                      >
-                        <option value="" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Select Industry</option>
-                        <option value="Technology & Software" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Technology & Software</option>
-                        <option value="Healthcare & Biotech" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Healthcare & Biotech</option>
-                        <option value="Fintech & Financial Services" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Fintech & Financial Services</option>
-                        <option value="E-commerce & Retail" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>E-commerce & Retail</option>
-                        <option value="Clean Energy & Sustainability" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Clean Energy & Sustainability</option>
-                        <option value="Education & EdTech" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Education & EdTech</option>
-                        <option value="Real Estate & PropTech" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Real Estate & PropTech</option>
-                        <option value="Transportation & Mobility" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Transportation & Mobility</option>
-                        <option value="Food & Agriculture" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Food & Agriculture</option>
-                        <option value="Manufacturing & Industrial" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Manufacturing & Industrial</option>
-                        <option value="Media & Entertainment" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Media & Entertainment</option>
-                        <option value="Gaming & Esports" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Gaming & Esports</option>
-                        <option value="Cybersecurity" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Cybersecurity</option>
-                        <option value="AI & Machine Learning" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>AI & Machine Learning</option>
-                        <option value="Blockchain & Crypto" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Blockchain & Crypto</option>
-                        <option value="SaaS & Cloud Services" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>SaaS & Cloud Services</option>
-                        <option value="Marketplace & Platforms" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Marketplace & Platforms</option>
-                        <option value="Consumer Goods & Services" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Consumer Goods & Services</option>
-                        <option value="B2B Services" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>B2B Services</option>
-                        <option value="Other" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Other (Custom)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-white/80 mb-2">
-                        Research Focus
-                      </label>
-                      <select
-                        value={researchPreferences.focus}
-                        onChange={(e) => setResearchPreferences(prev => ({ ...prev, focus: e.target.value }))}
-                        className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.1] rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/30 backdrop-blur-sm"
-                        style={{ colorScheme: 'dark' }}
-                      >
-                        <option value="" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Select Research Focus</option>
-                        <option value="Market Entry & Expansion" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Market Entry & Expansion</option>
-                        <option value="Competitive Analysis" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Competitive Analysis</option>
-                        <option value="Customer Segmentation" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Customer Segmentation</option>
-                        <option value="Product-Market Fit" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Product-Market Fit</option>
-                        <option value="Funding & Investment" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Funding & Investment</option>
-                        <option value="Revenue Models & Pricing" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Revenue Models & Pricing</option>
-                        <option value="Technology Trends" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Technology Trends</option>
-                        <option value="Regulatory & Compliance" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Regulatory & Compliance</option>
-                        <option value="Partnership Opportunities" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Partnership Opportunities</option>
-                        <option value="Risk Assessment" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Risk Assessment</option>
-                        <option value="Market Sizing & Growth" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Market Sizing & Growth</option>
-                        <option value="Customer Acquisition" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Customer Acquisition</option>
-                        <option value="Business Model Innovation" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Business Model Innovation</option>
-                        <option value="International Expansion" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>International Expansion</option>
-                        <option value="M&A Opportunities" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>M&A Opportunities</option>
-                        <option value="Industry Benchmarking" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Industry Benchmarking</option>
-                        <option value="Startup Ecosystem" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Startup Ecosystem</option>
-                        <option value="Talent & Hiring" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Talent & Hiring</option>
-                        <option value="Supply Chain Analysis" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Supply Chain Analysis</option>
-                        <option value="Sustainability & ESG" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Sustainability & ESG</option>
-                        <option value="Other" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Other (Custom)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-white/80 mb-2">
-                        Analysis Depth
-                      </label>
-                      <select
-                        value={researchPreferences.depth}
-                        onChange={(e) => setResearchPreferences(prev => ({ ...prev, depth: e.target.value }))}
-                        className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.1] rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/30 backdrop-blur-sm"
-                        style={{ colorScheme: 'dark' }}
-                      >
-                        <option value="comprehensive" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Comprehensive</option>
-                        <option value="detailed" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Detailed</option>
-                        <option value="overview" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Overview</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-white/80 mb-2">
-                        Data Format
-                      </label>
-                      <select
-                        value={researchPreferences.preserveTables ? 'tables' : 'summary'}
-                        onChange={(e) => setResearchPreferences(prev => ({ ...prev, preserveTables: e.target.value === 'tables' }))}
-                        className="w-full px-3 py-2 bg-white/[0.05] border border-white/[0.1] rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/30 backdrop-blur-sm"
-                        style={{ colorScheme: 'dark' }}
-                      >
-                        <option value="tables" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Detailed Tables</option>
-                        <option value="summary" style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}>Summarized</option>
-                      </select>
-                    </div>
-                  </div>
-                  {researchPreferences.preserveTables && (
-                    <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                      <p className="text-blue-300 text-sm">
-                        📊 <strong>Detailed Tables Mode:</strong> This will preserve all tabular data and comprehensive tables in the research results. Recommended for detailed market analysis and competitive intelligence.
-                      </p>
-                    </div>
-                  )}
-                </motion.div>
 
 
                 {/* Main Research Input */}
@@ -1295,13 +1294,6 @@ Please try again or check your OpenAI API key configuration.`);
                     disabled={loading}
                   >
                     {loading ? "🔍 Researching..." : "Generate Research Report"}
-                  </Button>
-                  <Button
-                    className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white border-0 rounded-xl transition-all duration-300 hover:shadow-[0_0_25px_rgba(34,197,94,0.4)] font-semibold px-6"
-                    onClick={() => setShowResearchModal(true)}
-                    disabled={loading}
-                  >
-                    🎯 Research Preferences
                   </Button>
                 </motion.div>
 
@@ -1329,6 +1321,7 @@ Please try again or check your OpenAI API key configuration.`);
                   </div>
                 </motion.div>
 
+
                 {/* Loading State */}
                 {loading && (
                   <motion.div
@@ -1346,6 +1339,11 @@ Please try again or check your OpenAI API key configuration.`);
                     <div className="mt-2 text-white/40 text-xs">
                       Generating detailed Business Model Canvas analysis with extensive data...
                     </div>
+                    {showTimer && timerCountdown > 0 && (
+                      <div className="mt-4 text-indigo-400 text-lg font-semibold">
+                        ⏱️ {formatTimeEstimation(timerCountdown)} remaining
+                      </div>
+                    )}
                   </motion.div>
                 )}
 
@@ -1364,6 +1362,23 @@ Please try again or check your OpenAI API key configuration.`);
                           <Bot className="w-5 h-5 text-indigo-400" />
                           {researchResults.includes('Research Failed') ? 'Research Error' : '🧠 AI Research Analysis'}
                         </h3>
+                        
+                        {/* Napkin AI Toggle */}
+                        {!researchResults.includes('Research Failed') && (
+                          <div className="flex items-center space-x-3">
+                            <span className="text-sm text-gray-400">View Mode:</span>
+                            <button
+                              onClick={() => setUseNapkinAI(!useNapkinAI)}
+                              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                useNapkinAI
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                              }`}
+                            >
+                              {useNapkinAI ? '🧠 Napkin AI' : '📊 Standard'}
+                            </button>
+                          </div>
+                        )}
                         {!researchResults.includes('Research Failed') && (
                           <div className="flex gap-2">
                             <Button
@@ -1399,6 +1414,10 @@ Please try again or check your OpenAI API key configuration.`);
                           <pre className="whitespace-pre-wrap text-sm leading-relaxed bg-white/[0.02] p-4 rounded-lg border border-white/[0.05] text-red-300 font-mono max-h-96 overflow-y-auto">
                             {researchResults}
                           </pre>
+                        ) : useNapkinAI ? (
+                          <div className="bg-white/[0.02] p-4 rounded-lg border border-white/[0.05] max-h-[50vh] overflow-y-auto w-full max-w-full">
+                            <NapkinAIResearch content={researchResults} />
+                          </div>
                         ) : (
                           <div className="bg-white/[0.02] p-4 rounded-lg border border-white/[0.05] max-h-[50vh] overflow-y-auto w-full max-w-full">
                             {researchResults.split('\n\n').map((paragraph, index) => {
@@ -1416,13 +1435,13 @@ Please try again or check your OpenAI API key configuration.`);
                                       <button
                                         onClick={() => openDataVisualization(paragraph, index)}
                                         className={`opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 rounded-lg flex-shrink-0 ${
-                                          structuredParagraphs.has(index)
+                                          activeVisualizationParagraphs.has(index)
                                             ? 'bg-blue-500/20 text-blue-300' 
                                             : 'bg-white/[0.08] hover:bg-white/[0.15] text-white/60 hover:text-white'
                                         }`}
-                                        title={structuredParagraphs.has(index) ? "Visualization opened!" : "Open data visualization"}
+                                        title={activeVisualizationParagraphs.has(index) ? "Visualization is open" : "Open data visualization"}
                                       >
-                                        {structuredParagraphs.has(index) ? (
+                                        {activeVisualizationParagraphs.has(index) ? (
                                           <div className="w-4 h-4 flex items-center justify-center">
                                             <span className="text-blue-400 text-xs">✓</span>
                                           </div>
@@ -1450,16 +1469,14 @@ Please try again or check your OpenAI API key configuration.`);
                                     </div>
                                   </div>
                                   
-                                  {/* Inline Chart */}
-                                  {activeChartParagraph === index && chartData && (
-                                    <InlineChart 
-                                      data={chartData} 
-                                      onClose={() => {
-                                        setActiveChartParagraph(null);
-                                        setChartData(null);
-                                      }} 
+                                  {/* Inline Data Visualization */}
+                                  {activeVisualizationParagraphs.has(index) && (
+                                    <InlineD3Visualization 
+                                      data={visualizationData.get(index) || paragraph} 
+                                      onClose={() => closeVisualization(index)} 
                                     />
                                   )}
+                                  
                                 </div>
                               );
                             })}
@@ -1659,12 +1676,6 @@ OPENAI_API_KEY=your_actual_api_key_here
         </div>
       </div>
 
-      {/* Research Questions Modal */}
-      <ResearchQuestionsModal
-        isOpen={showResearchModal}
-        onClose={handleResearchModalClose}
-        onComplete={handleResearchModalComplete}
-      />
 
     </div>
   );

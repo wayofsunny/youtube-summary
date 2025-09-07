@@ -601,11 +601,20 @@ export async function POST(request: NextRequest) {
     // Call existing APIs to get YouTube and article data
     console.log("🔍 Fetching YouTube and article data from existing APIs...");
     
+    // Check if YouTube API key is configured
+    if (!process.env.YOUTUBE_API_KEY) {
+      console.warn("⚠️ YouTube API key not configured. YouTube videos will not be included.");
+    }
+    
     let youtubeVideos = [];
     let newsArticles = [];
 
     try {
-      const [youtubeResponse, articleResponse] = await Promise.all([
+      // Only call YouTube API if key is configured
+      const apiCalls = [];
+      
+      if (process.env.YOUTUBE_API_KEY) {
+        apiCalls.push(
         fetch(`${request.nextUrl.origin}/api/summarize`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -613,7 +622,13 @@ export async function POST(request: NextRequest) {
             query: query,
             action: 'search'
           })
-        }),
+          })
+        );
+      } else {
+        apiCalls.push(Promise.resolve({ ok: false, status: 400, statusText: 'YouTube API key not configured' }));
+      }
+      
+      apiCalls.push(
         fetch(`${request.nextUrl.origin}/api/article_analysis`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -622,12 +637,15 @@ export async function POST(request: NextRequest) {
             num: isAdditionalResearch ? 15 : 20
           })
         })
-      ]);
+      );
 
-      if (youtubeResponse.ok) {
+      const [youtubeResponse, articleResponse] = await Promise.all(apiCalls);
+
+      if (youtubeResponse.ok && 'json' in youtubeResponse) {
         try {
-          const youtubeData = await youtubeResponse.json();
+          const youtubeData = await (youtubeResponse as Response).json();
           console.log("YouTube API response:", youtubeData);
+          console.log("YouTube videos found:", youtubeData.videos?.length || 0);
           
           // Transform YouTube data to match frontend expectations
           if (youtubeData.videos && Array.isArray(youtubeData.videos)) {
@@ -641,19 +659,27 @@ export async function POST(request: NextRequest) {
               thumbnail: video.thumbnail,
               videoUrl: video.videoUrl,
               channelUrl: video.channelUrl,
-              summary: `Video about ${query} by ${video.channelTitle} with ${(video.viewCount || 0).toLocaleString()} views`
+              summary: `Video about ${query} by ${video.channelTitle} with ${(video.viewCount || 0).toLocaleString()} views`,
+              link: `https://www.youtube.com/watch?v=${video.id}`
             }));
+            console.log("Processed YouTube videos:", youtubeVideos.length);
+          } else {
+            console.log("No YouTube videos found in response");
           }
         } catch (e) {
           console.warn("Failed to parse YouTube response:", e);
         }
       } else {
         console.warn("YouTube API failed:", youtubeResponse.status, youtubeResponse.statusText);
+        if ('text' in youtubeResponse) {
+          const errorText = await (youtubeResponse as Response).text();
+          console.warn("YouTube API error details:", errorText);
+        }
       }
 
-      if (articleResponse.ok) {
+      if (articleResponse.ok && 'json' in articleResponse) {
         try {
-          const articleData = await articleResponse.json();
+          const articleData = await (articleResponse as Response).json();
           console.log("Article API response:", articleData);
           
           // Transform article data to match frontend expectations

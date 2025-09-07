@@ -24,7 +24,7 @@ interface DataVisualizationProps {
 }
 
 export const DataVisualization: React.FC<DataVisualizationProps> = ({ data, onClose }) => {
-  const [activeTab, setActiveTab] = useState<'pie' | 'bar' | 'table'>('pie');
+  const [activeTab, setActiveTab] = useState<'pie' | 'bar' | 'table'>('table');
   const [visualizationData, setVisualizationData] = useState<VisualizationData>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,48 +36,44 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({ data, onCl
   // Color palette for visualizations
   const colorPalette = [
     '#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6',
-    '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1'
+    '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1',
+    '#14B8A6', '#F43F5E', '#8B5A2B', '#1E40AF', '#7C3AED'
   ];
 
-  // Parse data and extract structured information
-  useEffect(() => {
-    const parseData = () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        const lines = data.split('\n').filter(line => line.trim());
-        const parsedData: VisualizationData = {};
-
-        // Extract pie chart data (percentages, market share, etc.)
+  // Enhanced data parsing function
+  const parseData = (content: string): VisualizationData => {
+    console.log('🎨 Parsing content for visualization:', content.substring(0, 200) + '...');
+    
+    const result: VisualizationData = {};
         const pieData: DataPoint[] = [];
         const barData: DataPoint[] = [];
         const tableData: Array<Record<string, any>> = [];
-        const allColumns = new Set<string>();
+    
+    try {
+      const lines = content.split('\n').filter(line => line.trim());
+      
+      // Enhanced patterns for data extraction
+      const patterns = {
+        // Percentage patterns
+        percentage: /([^:\n]+):\s*(\d+(?:\.\d+)?)%/g,
+        // Number patterns with various formats
+        number: /([^:\n]+):\s*\$?(\d+(?:,\d{3})*(?:\.\d+)?[BMK]?)/g,
+        // Ratio patterns
+        ratio: /([^:\n]+):\s*(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/g,
+        // Table patterns with pipes
+        tablePipe: /([^|]+)\|([^|]+)(?:\|([^|]+))?/g,
+        // Key-value patterns
+        keyValue: /([^:\n]+):\s*([^\n]+)/g,
+        // Bullet point patterns
+        bullet: /[•\-\*]\s*([^:\n]+):\s*([^\n]+)/g
+      };
 
-        // First pass: identify all possible column headers
-        lines.forEach((line) => {
-          if (line.includes('|')) {
-            const columns = line.split('|').map(col => col.trim()).filter(col => col);
-            columns.forEach((col, index) => {
-              if (index === 0) {
-                allColumns.add('Metric');
-              } else if (index === 1) {
-                allColumns.add('Value');
-              } else {
-                allColumns.add(`Column ${index + 1}`);
-              }
-            });
-          }
-        });
-
-        // Look for percentage patterns
-        lines.forEach((line, index) => {
-          const percentageMatch = line.match(/([^:]+):\s*(\d+(?:\.\d+)?)%/);
-          if (percentageMatch) {
-            const label = percentageMatch[1].trim();
-            const value = parseFloat(percentageMatch[2]);
-            if (value > 0) {
+      // Extract pie chart data (percentages)
+      let match;
+      while ((match = patterns.percentage.exec(content)) !== null) {
+        const label = match[1].trim();
+        const value = parseFloat(match[2]);
+        if (value > 0 && value <= 100) {
               pieData.push({
                 label,
                 value,
@@ -86,11 +82,11 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({ data, onCl
             }
           }
 
-          // Look for numerical data patterns
-          const numberMatch = line.match(/([^:]+):\s*\$?(\d+(?:,\d{3})*(?:\.\d+)?[BMK]?)/);
-          if (numberMatch) {
-            const label = numberMatch[1].trim();
-            let value = numberMatch[2].replace(/,/g, '');
+      // Extract bar chart data (numbers)
+      patterns.number.lastIndex = 0; // Reset regex
+      while ((match = patterns.number.exec(content)) !== null) {
+        const label = match[1].trim();
+        let value = match[2].replace(/,/g, '');
             
             // Handle K, M, B suffixes
             if (value.includes('K')) {
@@ -111,14 +107,13 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({ data, onCl
             }
           }
 
-          // Look for table-like patterns
-          if (line.includes('|') || (line.includes(':') && line.includes(','))) {
-            const tableRow: Record<string, any> = {};
-            
+      // Extract table data from various patterns
+      lines.forEach((line) => {
+        // Pipe-separated data
             if (line.includes('|')) {
               const columns = line.split('|').map(col => col.trim()).filter(col => col);
               if (columns.length >= 2) {
-                // Dynamically create columns based on data
+            const tableRow: Record<string, any> = {};
                 columns.forEach((col, index) => {
                   if (index === 0) {
                     tableRow['Metric'] = col;
@@ -132,19 +127,10 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({ data, onCl
                 });
                 tableData.push(tableRow);
               }
-            } else {
+        }
+        // Key-value pairs
+        else if (line.includes(':') && !line.includes('|')) {
               const parts = line.split(':');
-              if (parts.length >= 2) {
-                tableRow['Metric'] = parts[0].trim();
-                tableRow['Value'] = parts[1].trim();
-                tableData.push(tableRow);
-              }
-            }
-          }
-
-          // Also look for other structured patterns
-          if (line.includes(' - ') && !line.includes('|')) {
-            const parts = line.split(' - ');
             if (parts.length >= 2) {
               const tableRow: Record<string, any> = {
                 'Metric': parts[0].trim(),
@@ -153,10 +139,9 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({ data, onCl
               tableData.push(tableRow);
             }
           }
-
-          // Look for bullet point patterns
-          if (line.includes('•') && line.includes(':')) {
-            const cleanLine = line.replace('•', '').trim();
+        // Bullet points
+        else if (line.includes('•') || line.includes('-') || line.includes('*')) {
+          const cleanLine = line.replace(/[•\-\*]/, '').trim();
             const parts = cleanLine.split(':');
             if (parts.length >= 2) {
               const tableRow: Record<string, any> = {
@@ -168,35 +153,63 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({ data, onCl
           }
         });
 
-        // If no structured data found, create sample data
+      // If no data found, create comprehensive sample data
         if (pieData.length === 0 && barData.length === 0 && tableData.length === 0) {
-          // Create sample data based on common business metrics
-          parsedData.pieChart = [
+        result.pieChart = [
             { label: 'Market Share', value: 35, color: colorPalette[0] },
             { label: 'Competition', value: 25, color: colorPalette[1] },
             { label: 'New Entrants', value: 20, color: colorPalette[2] },
             { label: 'Others', value: 20, color: colorPalette[3] }
           ];
           
-          parsedData.barChart = [
+        result.barChart = [
             { label: 'Revenue', value: 5000000, color: colorPalette[0] },
-            { label: 'Growth', value: 25, color: colorPalette[1] },
+          { label: 'Growth Rate', value: 25, color: colorPalette[1] },
             { label: 'Customers', value: 10000, color: colorPalette[2] },
-            { label: 'Market Size', value: 100000000, color: colorPalette[3] }
+          { label: 'Market Size', value: 100000000, color: colorPalette[3] },
+          { label: 'Profit Margin', value: 15, color: colorPalette[4] }
           ];
           
-          parsedData.table = [
+        result.table = [
             { Metric: 'Total Addressable Market', Value: '$100B', Details: 'Global market size' },
             { Metric: 'Serviceable Market', Value: '$10B', Details: 'Addressable segment' },
-            { Metric: 'Market Growth Rate', Value: '15%', Details: 'Annual growth' }
+          { Metric: 'Market Growth Rate', Value: '15%', Details: 'Annual growth' },
+          { Metric: 'Customer Acquisition Cost', Value: '$50', Details: 'Average CAC' },
+          { Metric: 'Lifetime Value', Value: '$500', Details: 'Average LTV' }
           ];
         } else {
-          if (pieData.length > 0) parsedData.pieChart = pieData;
-          if (barData.length > 0) parsedData.barChart = barData;
-          if (tableData.length > 0) parsedData.table = tableData;
-        }
+        if (pieData.length > 0) result.pieChart = pieData;
+        if (barData.length > 0) result.barChart = barData;
+        if (tableData.length > 0) result.table = tableData;
+      }
 
+      console.log('🎨 Extracted visualization data:', result);
+      return result;
+    } catch (error) {
+      console.error('🎨 Error parsing content:', error);
+      return {};
+    }
+  };
+
+  // Parse data and extract structured information
+  useEffect(() => {
+    const processData = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        const parsedData = parseData(data);
         setVisualizationData(parsedData);
+        
+        // Set default tab based on available data
+        if (parsedData.table && parsedData.table.length > 0) {
+          setActiveTab('table');
+        } else if (parsedData.pieChart && parsedData.pieChart.length > 0) {
+          setActiveTab('pie');
+        } else if (parsedData.barChart && parsedData.barChart.length > 0) {
+          setActiveTab('bar');
+        }
+        
         setIsLoading(false);
       } catch (err) {
         setError('Failed to parse data for visualization');
@@ -204,18 +217,18 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({ data, onCl
       }
     };
 
-    parseData();
+    processData();
   }, [data]);
 
-  // Create pie chart
+  // Create enhanced pie chart
   useEffect(() => {
     if (activeTab === 'pie' && visualizationData.pieChart && pieRef.current) {
       const svg = d3.select(pieRef.current);
       svg.selectAll("*").remove();
 
-      const width = 400;
-      const height = 400;
-      const radius = Math.min(width, height) / 2 - 20;
+      const width = 500;
+      const height = 500;
+      const radius = Math.min(width, height) / 2 - 40;
 
       const g = svg
         .attr("width", width)
@@ -235,16 +248,24 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({ data, onCl
         .innerRadius(radius * 0.9)
         .outerRadius(radius * 0.9);
 
+      const labelArc = d3.arc<d3.PieArcDatum<DataPoint>>()
+        .innerRadius(radius + 20)
+        .outerRadius(radius + 20);
+
       const arcs = g.selectAll(".arc")
         .data(pie(visualizationData.pieChart))
         .enter()
         .append("g")
         .attr("class", "arc");
 
+      // Add pie slices
       arcs.append("path")
         .attr("d", arc)
         .attr("fill", d => d.data.color || colorPalette[0])
         .style("opacity", 0.8)
+        .style("cursor", "pointer")
+        .style("stroke", "#fff")
+        .style("stroke-width", 2)
         .on("mouseover", function(event, d) {
           d3.select(this).style("opacity", 1);
           
@@ -252,19 +273,21 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({ data, onCl
           const tooltip = d3.select("body").append("div")
             .attr("class", "tooltip")
             .style("position", "absolute")
-            .style("background", "rgba(0, 0, 0, 0.8)")
+            .style("background", "rgba(0, 0, 0, 0.9)")
             .style("color", "white")
-            .style("padding", "8px 12px")
-            .style("border-radius", "6px")
-            .style("font-size", "12px")
+            .style("padding", "10px 15px")
+            .style("border-radius", "8px")
+            .style("font-size", "13px")
             .style("pointer-events", "none")
             .style("z-index", "1000")
-            .style("opacity", 0);
+            .style("opacity", 0)
+            .style("box-shadow", "0 4px 12px rgba(0,0,0,0.3)");
 
           tooltip.transition().duration(200).style("opacity", 1);
           tooltip.html(`
-            <strong>${d.data.label}</strong><br/>
-            Value: ${d.data.value}${d.data.value <= 100 ? '%' : ''}
+            <div style="font-weight: bold; margin-bottom: 4px;">${d.data.label}</div>
+            <div>Value: ${d.data.value.toFixed(1)}%</div>
+            <div>Angle: ${((d.endAngle - d.startAngle) * 180 / Math.PI).toFixed(1)}°</div>
           `)
             .style("left", (event.pageX + 10) + "px")
             .style("top", (event.pageY - 10) + "px");
@@ -274,28 +297,57 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({ data, onCl
           d3.selectAll(".tooltip").remove();
         });
 
-      // Add labels
+      // Add percentage labels on slices
       arcs.append("text")
         .attr("transform", d => {
-          const pos = outerArc.centroid(d);
+          const pos = arc.centroid(d);
           return `translate(${pos[0]}, ${pos[1]})`;
         })
         .attr("text-anchor", "middle")
         .style("font-size", "12px")
         .style("fill", "white")
-        .text(d => d.data.value + (d.data.value <= 100 ? '%' : ''));
+        .style("font-weight", "bold")
+        .style("text-shadow", "1px 1px 2px rgba(0,0,0,0.5)")
+        .text(d => {
+          const percentage = ((d.endAngle - d.startAngle) / (2 * Math.PI) * 100).toFixed(1);
+          return percentage + '%';
+        });
+
+      // Add legend labels
+      arcs.append("text")
+        .attr("transform", d => {
+          const pos = labelArc.centroid(d);
+          return `translate(${pos[0]}, ${pos[1]})`;
+        })
+        .attr("text-anchor", d => {
+          const pos = labelArc.centroid(d);
+          return pos[0] > 0 ? "start" : "end";
+        })
+        .style("font-size", "11px")
+        .style("fill", "white")
+        .style("font-weight", "500")
+        .text(d => d.data.label);
+
+      // Add chart title
+      g.append("text")
+        .attr("transform", `translate(0, -${radius + 30})`)
+        .style("text-anchor", "middle")
+        .style("fill", "white")
+        .style("font-size", "16px")
+        .style("font-weight", "700")
+        .text("Data Distribution");
     }
   }, [activeTab, visualizationData.pieChart]);
 
-  // Create bar chart
+  // Create bar chart with enhanced features
   useEffect(() => {
     if (activeTab === 'bar' && visualizationData.barChart && barRef.current) {
       const svg = d3.select(barRef.current);
       svg.selectAll("*").remove();
 
-      const width = 500;
-      const height = 300;
-      const margin = { top: 20, right: 30, bottom: 40, left: 60 };
+      const width = 600;
+      const height = 400;
+      const margin = { top: 40, right: 40, bottom: 80, left: 80 };
 
       const g = svg
         .attr("width", width)
@@ -303,6 +355,7 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({ data, onCl
         .append("g")
         .attr("transform", `translate(${margin.left}, ${margin.top})`);
 
+      // Create scales
       const xScale = d3.scaleBand()
         .domain(visualizationData.barChart.map(d => d.label))
         .range([0, width - margin.left - margin.right])
@@ -312,6 +365,7 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({ data, onCl
         .domain([0, d3.max(visualizationData.barChart, d => d.value) || 0])
         .range([height - margin.top - margin.bottom, 0]);
 
+      // Add bars with enhanced styling
       g.selectAll(".bar")
         .data(visualizationData.barChart)
         .enter()
@@ -323,25 +377,27 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({ data, onCl
         .attr("height", d => height - margin.top - margin.bottom - yScale(d.value))
         .attr("fill", d => d.color || colorPalette[0])
         .style("opacity", 0.8)
+        .style("cursor", "pointer")
         .on("mouseover", function(event, d) {
           d3.select(this).style("opacity", 1);
           
           const tooltip = d3.select("body").append("div")
             .attr("class", "tooltip")
             .style("position", "absolute")
-            .style("background", "rgba(0, 0, 0, 0.8)")
+            .style("background", "rgba(0, 0, 0, 0.9)")
             .style("color", "white")
-            .style("padding", "8px 12px")
-            .style("border-radius", "6px")
-            .style("font-size", "12px")
+            .style("padding", "10px 15px")
+            .style("border-radius", "8px")
+            .style("font-size", "13px")
             .style("pointer-events", "none")
             .style("z-index", "1000")
-            .style("opacity", 0);
+            .style("opacity", 0)
+            .style("box-shadow", "0 4px 12px rgba(0,0,0,0.3)");
 
           tooltip.transition().duration(200).style("opacity", 1);
           tooltip.html(`
-            <strong>${d.label}</strong><br/>
-            Value: ${d.value.toLocaleString()}
+            <div style="font-weight: bold; margin-bottom: 4px;">${d.label}</div>
+            <div>Value: ${d.value.toLocaleString()}</div>
           `)
             .style("left", (event.pageX + 10) + "px")
             .style("top", (event.pageY - 10) + "px");
@@ -351,20 +407,75 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({ data, onCl
           d3.selectAll(".tooltip").remove();
         });
 
-      // Add x-axis
+      // Add value labels on top of bars
+      g.selectAll(".bar-label")
+        .data(visualizationData.barChart)
+        .enter()
+        .append("text")
+        .attr("class", "bar-label")
+        .attr("x", d => (xScale(d.label) || 0) + xScale.bandwidth() / 2)
+        .attr("y", d => yScale(d.value) - 5)
+        .attr("text-anchor", "middle")
+        .style("font-size", "11px")
+        .style("fill", "white")
+        .style("font-weight", "500")
+        .text(d => {
+          if (d.value >= 1000000) {
+            return (d.value / 1000000).toFixed(1) + 'M';
+          } else if (d.value >= 1000) {
+            return (d.value / 1000).toFixed(1) + 'K';
+          } else {
+            return d.value.toString();
+          }
+        });
+
+      // Add x-axis with labels
       g.append("g")
         .attr("transform", `translate(0, ${height - margin.top - margin.bottom})`)
         .call(d3.axisBottom(xScale))
         .selectAll("text")
         .style("fill", "white")
-        .style("font-size", "12px");
+        .style("font-size", "12px")
+        .style("font-weight", "500")
+        .attr("transform", "rotate(-45)")
+        .style("text-anchor", "end");
 
-      // Add y-axis
+      // Add y-axis with labels
       g.append("g")
-        .call(d3.axisLeft(yScale))
+        .call(d3.axisLeft(yScale).tickFormat(d3.format(".2s")))
         .selectAll("text")
         .style("fill", "white")
-        .style("font-size", "12px");
+        .style("font-size", "12px")
+        .style("font-weight", "500");
+
+      // Add axis labels
+      g.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("y", 0 - margin.left)
+        .attr("x", 0 - (height - margin.top - margin.bottom) / 2)
+        .attr("dy", "1em")
+        .style("text-anchor", "middle")
+        .style("fill", "white")
+        .style("font-size", "14px")
+        .style("font-weight", "600")
+        .text("Values");
+
+      g.append("text")
+        .attr("transform", `translate(${(width - margin.left - margin.right) / 2}, ${height - margin.top - margin.bottom + 50})`)
+        .style("text-anchor", "middle")
+        .style("fill", "white")
+        .style("font-size", "14px")
+        .style("font-weight", "600")
+        .text("Categories");
+
+      // Add chart title
+      g.append("text")
+        .attr("transform", `translate(${(width - margin.left - margin.right) / 2}, -10)`)
+        .style("text-anchor", "middle")
+        .style("fill", "white")
+        .style("font-size", "16px")
+        .style("font-weight", "700")
+        .text("Data Comparison Chart");
     }
   }, [activeTab, visualizationData.barChart]);
 
@@ -425,12 +536,12 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({ data, onCl
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4 pointer-events-none">
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.9 }}
-        className="bg-white/10 border border-white/20 rounded-2xl backdrop-blur-sm w-full max-w-6xl max-h-[95vh] overflow-hidden"
+        className="bg-white/10 border border-white/20 rounded-2xl backdrop-blur-sm w-full max-w-6xl max-h-[90vh] overflow-hidden pointer-events-auto"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-white/10">
@@ -515,16 +626,19 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({ data, onCl
                 exit={{ opacity: 0, y: -20 }}
                 className="flex flex-col items-center"
               >
-                <h3 className="text-lg font-semibold text-white mb-4">Market Distribution</h3>
-                <svg ref={pieRef} className="w-full max-w-md"></svg>
-                <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                <h3 className="text-lg font-semibold text-white mb-4">Data Distribution</h3>
+                <svg ref={pieRef} className="w-full max-w-lg"></svg>
+                <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm max-w-md">
                   {visualizationData.pieChart.map((item, index) => (
-                    <div key={index} className="flex items-center gap-2">
+                    <div key={index} className="flex items-center gap-3 p-2 bg-white/5 rounded-lg">
                       <div
-                        className="w-3 h-3 rounded-full"
+                        className="w-4 h-4 rounded-full flex-shrink-0"
                         style={{ backgroundColor: item.color }}
                       ></div>
-                      <span className="text-white/80">{item.label}: {item.value}{item.value <= 100 ? '%' : ''}</span>
+                      <div className="flex-1">
+                        <div className="text-white font-medium">{item.label}</div>
+                        <div className="text-white/70 text-xs">{item.value.toFixed(1)}%</div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -553,22 +667,19 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({ data, onCl
                 className="w-full"
               >
                 <h3 className="text-lg font-semibold text-white mb-4">Data Table</h3>
-                <div className="overflow-x-auto max-w-full border border-white/10 rounded-lg">
+                <div className="overflow-x-auto max-w-full border border-white/10 rounded-lg bg-white/5">
                   <div className="min-w-full">
-                    <table className="w-full border-collapse table-fixed" style={{ minWidth: '800px' }}>
+                    <table className="w-full border-collapse">
                       <thead>
-                        <tr className="border-b border-white/20">
+                        <tr className="border-b border-white/20 bg-white/10">
                           {Object.keys(visualizationData.table[0] || {}).map((header, index) => (
                             <th
                               key={index}
-                              className="text-left py-3 px-2 text-white/80 font-medium whitespace-nowrap"
-                              style={{ 
-                                width: `${Math.max(150, 100 / Object.keys(visualizationData.table?.[0] || {}).length)}%`,
-                                minWidth: '120px'
-                              }}
+                              className="text-left py-4 px-4 text-white font-semibold text-sm"
+                              style={{ minWidth: '150px' }}
                             >
-                              <div className="truncate" title={header}>
-                                {header}
+                              <div className="flex items-center gap-2">
+                                <span>{header}</span>
                               </div>
                             </th>
                           ))}
@@ -578,21 +689,15 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({ data, onCl
                         {visualizationData.table.map((row, rowIndex) => (
                           <tr
                             key={rowIndex}
-                            className="border-b border-white/10 hover:bg-white/5 transition-colors"
+                            className="border-b border-white/10 hover:bg-white/10 transition-colors"
                           >
                             {Object.values(row).map((cell, cellIndex) => (
                               <td
                                 key={cellIndex}
-                                className="py-3 px-2 text-white/70 text-sm"
-                                style={{ 
-                                  width: `${Math.max(150, 100 / Object.keys(visualizationData.table?.[0] || {}).length)}%`,
-                                  minWidth: '120px'
-                                }}
+                                className="py-4 px-4 text-white/80 text-sm"
+                                style={{ minWidth: '150px' }}
                               >
-                                <div 
-                                  className="truncate" 
-                                  title={String(cell)}
-                                >
+                                <div className="break-words">
                                   {String(cell)}
                                 </div>
                               </td>
@@ -603,16 +708,24 @@ export const DataVisualization: React.FC<DataVisualizationProps> = ({ data, onCl
                     </table>
                   </div>
                 </div>
-                <div className="mt-4 flex flex-wrap gap-4 text-xs text-white/50">
-                  <div>Rows: {visualizationData.table.length}</div>
-                  <div>Columns: {Object.keys(visualizationData.table[0] || {}).length}</div>
+                <div className="mt-4 flex flex-wrap gap-4 text-xs text-white/60">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">Rows:</span>
+                    <span className="px-2 py-1 bg-white/10 rounded">{visualizationData.table.length}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">Columns:</span>
+                    <span className="px-2 py-1 bg-white/10 rounded">{Object.keys(visualizationData.table[0] || {}).length}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">Columns:</span>
                   <div className="flex flex-wrap gap-1">
-                    <span>Columns:</span>
                     {Object.keys(visualizationData.table[0] || {}).map((col, index) => (
-                      <span key={index} className="px-2 py-1 bg-white/10 rounded text-white/70">
+                        <span key={index} className="px-2 py-1 bg-white/10 rounded text-white/70 text-xs">
                         {col}
                       </span>
                     ))}
+                    </div>
                   </div>
                 </div>
               </motion.div>
