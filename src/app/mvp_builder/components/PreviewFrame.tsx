@@ -18,6 +18,25 @@ export function PreviewFrame({ webcontainer, isReady = false }: PreviewFrameProp
     }
   }, [webcontainer, isReady]); // Remove startPreview from dependencies to avoid infinite loop
 
+  // Listen for retry React app event
+  useEffect(() => {
+    const handleRetryReactApp = async () => {
+      if (webcontainer) {
+        console.log('PreviewFrame: Retry React app requested');
+        setIsLoading(true);
+        setError(null);
+        const success = await createWorkingReactApp();
+        if (!success) {
+          setError('Failed to create React app. Please check console for details.');
+          setIsLoading(false);
+        }
+      }
+    };
+
+    window.addEventListener('retry-react-app', handleRetryReactApp);
+    return () => window.removeEventListener('retry-react-app', handleRetryReactApp);
+  }, [webcontainer]);
+
   const createWorkingReactApp = async () => {
     if (!webcontainer) return false;
     

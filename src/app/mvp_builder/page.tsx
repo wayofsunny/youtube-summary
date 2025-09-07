@@ -389,6 +389,11 @@ export default function MVPBuilderPage() {
       const templateResponse = await axios.post(`${BACKEND_URL}/api/mvp_builder`, {
         type: 'template',
         prompt: initialPrompt.trim()
+      }, {
+        timeout: 30000, // 30 second timeout
+        headers: {
+          'Content-Type': 'application/json',
+        }
       });
       
       console.log('Template response status:', templateResponse.status);
@@ -677,8 +682,24 @@ export default function MVPBuilderPage() {
       
       } catch (error) {
         console.error('Error starting MVP builder:', error);
-      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
-      setError(`Failed to start MVP builder: ${errorMessage}`);
+        
+        let errorMessage = 'An unexpected error occurred';
+        
+        if (axios.isAxiosError(error)) {
+          if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
+            errorMessage = 'Cannot connect to the development server. Please make sure the server is running on localhost:3000';
+          } else if (error.response?.status === 500) {
+            errorMessage = `Server error: ${error.response.data?.error || 'Internal server error'}`;
+          } else if (error.response?.status === 404) {
+            errorMessage = 'API endpoint not found. Please check if the server is running correctly';
+          } else {
+            errorMessage = `API Error: ${error.response?.data?.error || error.message}`;
+          }
+        } else if (error instanceof Error) {
+          errorMessage = error.message;
+        }
+        
+        setError(`API Error: ${errorMessage}`);
       } finally {
         setIsLoading(false);
       setIsValidating(false);

@@ -9,6 +9,15 @@ const openai = new OpenAI({
 });
 
 
+export async function GET() {
+  // Health check endpoint
+  return NextResponse.json({
+    status: 'ok',
+    hasOpenAIKey: !!(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'dummy-key-for-testing'),
+    timestamp: new Date().toISOString()
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { type, prompt, messages } = await request.json();
@@ -23,11 +32,41 @@ export async function POST(request: NextRequest) {
     
     // Check if OpenAI API key is configured
     if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'dummy-key-for-testing') {
+      console.log('OpenAI API key not configured, returning mock response');
+      
+      // Return mock response for development
+      if (type === 'template') {
+        return NextResponse.json({
+          prompts: [
+            'Create a basic React application structure',
+            'Set up package.json with necessary dependencies'
+          ],
+          uiPrompts: [
+            'Create package.json with React and Vite dependencies',
+            'Create index.html with proper structure',
+            'Create src/main.jsx as entry point',
+            'Create src/App.jsx with basic component',
+            'Create src/index.css for styling'
+          ]
+        });
+      }
+      
+      if (type === 'chat') {
+        return NextResponse.json({
+          uiPrompts: [
+            'Create additional React components',
+            'Add more styling and functionality'
+          ]
+        });
+      }
+      
       return NextResponse.json(
         { error: 'OpenAI API key not configured. Please set OPENAI_API_KEY environment variable.' },
         { status: 500 }
       );
     }
+    
+    console.log('OpenAI API key found, using real API calls');
 
     if (type === 'template') {
       // Validate prompt for template request
@@ -39,6 +78,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Determine if project should be React or Node.js using OpenAI
+      console.log('Making OpenAI API call to determine project type...');
       const response = await openai.chat.completions.create({
         messages: [
           {
@@ -54,6 +94,8 @@ export async function POST(request: NextRequest) {
         max_tokens: 200,
         temperature: 0.3
       });
+      
+      console.log('OpenAI response received:', response.choices[0]?.message?.content);
 
       const answer = response.choices[0]?.message?.content?.trim().toLowerCase();
 
@@ -103,6 +145,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Handle chat messages using OpenAI
+      console.log('Processing chat request with', messages.length, 'messages');
       const systemPrompt = getSystemPrompt();
       const openaiMessages = [
         {
@@ -114,6 +157,8 @@ export async function POST(request: NextRequest) {
           content: msg.content
         }))
       ];
+      
+      console.log('Making OpenAI chat completion request...');
 
       const response = await openai.chat.completions.create({
         messages: openaiMessages,

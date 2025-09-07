@@ -202,6 +202,7 @@ export function useWebContainer() {
     const [webcontainer, setWebcontainer] = useState<WebContainer | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isReady, setIsReady] = useState(false);
     const hasInitialized = useRef(false);
 
     useEffect(() => {
@@ -218,6 +219,7 @@ export function useWebContainer() {
             setWebcontainer(webContainer);
             setError(error);
             setIsLoading(isLoading);
+            setIsReady(!!webContainer && !error);
         });
 
         // Try to get WebContainer if not already available and not disabled
@@ -233,5 +235,5 @@ export function useWebContainer() {
         return unsubscribe;
     }, []);
 
-    return { webcontainer, isLoading, error };
+    return { webcontainer, isLoading, error, isReady };
 }
