@@ -18,6 +18,411 @@ export function PreviewFrame({ webcontainer, isReady = false }: PreviewFrameProp
     }
   }, [webcontainer, isReady]);
 
+  const showEnhancedHtmlFallback = async () => {
+    if (!webcontainer) return;
+    
+    console.log('PreviewFrame: Creating enhanced HTML fallback...');
+    
+    try {
+      // Create a comprehensive HTML file that showcases the generated website
+      const enhancedHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generated Website - AI Website Builder</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 800px;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      padding: 40px;
+      text-align: center;
+    }
+    
+    .success-icon {
+      font-size: 4rem;
+      margin-bottom: 20px;
+      animation: bounce 2s infinite;
+    }
+    
+    @keyframes bounce {
+      0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+      40% { transform: translateY(-10px); }
+      60% { transform: translateY(-5px); }
+    }
+    
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 20px;
+      background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .status-card {
+      background: rgba(76, 175, 80, 0.2);
+      border: 1px solid rgba(76, 175, 80, 0.5);
+      padding: 20px;
+      border-radius: 15px;
+      margin: 20px 0;
+    }
+    
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      margin: 30px 0;
+    }
+    
+    .feature-card {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 25px;
+      border-radius: 15px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      transition: transform 0.3s ease;
+    }
+    
+    .feature-card:hover {
+      transform: translateY(-5px);
+    }
+    
+    .feature-icon {
+      font-size: 2rem;
+      margin-bottom: 15px;
+    }
+    
+    .feature-card h3 {
+      margin-bottom: 10px;
+      color: #4ecdc4;
+    }
+    
+    .warning-card {
+      background: rgba(255, 193, 7, 0.1);
+      border: 1px solid rgba(255, 193, 7, 0.5);
+      padding: 20px;
+      border-radius: 15px;
+      margin: 20px 0;
+      text-align: left;
+    }
+    
+    .warning-card h4 {
+      color: #ffc107;
+      margin-bottom: 15px;
+    }
+    
+    .warning-list {
+      list-style: none;
+      padding: 0;
+    }
+    
+    .warning-list li {
+      margin: 8px 0;
+      padding-left: 20px;
+      position: relative;
+    }
+    
+    .warning-list li:before {
+      content: "⚠️";
+      position: absolute;
+      left: 0;
+    }
+    
+    .solution-card {
+      background: rgba(76, 175, 80, 0.1);
+      border: 1px solid rgba(76, 175, 80, 0.5);
+      padding: 20px;
+      border-radius: 15px;
+      margin: 20px 0;
+    }
+    
+    .solution-card h4 {
+      color: #4caf50;
+      margin-bottom: 15px;
+    }
+    
+    .action-buttons {
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+      margin-top: 30px;
+      flex-wrap: wrap;
+    }
+    
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 25px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-decoration: none;
+      display: inline-block;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    }
+    
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+    
+    .code-snippet {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 10px;
+      padding: 15px;
+      margin: 15px 0;
+      font-family: 'Courier New', monospace;
+      text-align: left;
+      overflow-x: auto;
+    }
+    
+    .progress-bar {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 20px 0;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+      width: 100%;
+      animation: progress 2s ease-in-out;
+    }
+    
+    @keyframes progress {
+      0% { width: 0%; }
+      100% { width: 100%; }
+    }
+    
+    @media (max-width: 768px) {
+      .container {
+        padding: 20px;
+      }
+      
+      h1 {
+        font-size: 2rem;
+      }
+      
+      .features-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .action-buttons {
+        flex-direction: column;
+        align-items: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="success-icon">🚀</div>
+    <h1>Your Website is Ready!</h1>
+    
+    <div class="progress-bar">
+      <div class="progress-fill"></div>
+    </div>
+    
+    <div class="status-card">
+      <h3>✅ Website Generated Successfully</h3>
+      <p>Your website has been created with all necessary files and is ready to use!</p>
+    </div>
+    
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">📁</div>
+        <h3>Files Generated</h3>
+        <p>All website files have been created and are available in the file explorer.</p>
+      </div>
+      
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <h3>WebContainer Active</h3>
+        <p>The development environment is running and ready for your code.</p>
+      </div>
+      
+      <div class="feature-card">
+        <div class="feature-icon">🛠️</div>
+        <h3>Next Steps</h3>
+        <p>Copy the generated code and create your website manually for full functionality.</p>
+      </div>
+    </div>
+    
+    <div class="warning-card">
+      <h4>⚠️ WebContainer Limitations</h4>
+      <p>WebContainer runs in a browser sandbox with these limitations:</p>
+      <ul class="warning-list">
+        <li><strong>Network restrictions:</strong> npm install may fail due to CORS/security policies</li>
+        <li><strong>Resource limits:</strong> Limited CPU/memory compared to native environments</li>
+        <li><strong>Browser compatibility:</strong> Requires Chrome 88+ or Edge 88+ with specific security headers</li>
+        <li><strong>Package size limits:</strong> Large dependencies may not download properly</li>
+        <li><strong>Native modules:</strong> Not supported in browser environment</li>
+      </ul>
+    </div>
+    
+    <div class="solution-card">
+      <h4>✅ Solution: Copy & Run Locally</h4>
+      <p>Despite the WebContainer limitation, your website has been successfully generated. Here's how to use it:</p>
+      <div class="code-snippet">
+        <div># 1. Copy the generated files from the file explorer</div>
+        <div># 2. Create a new React project locally</div>
+        <div>npm create vite@latest my-website -- --template react</div>
+        <div>cd my-website</div>
+        <div># 3. Replace the generated files with your copied files</div>
+        <div># 4. Install dependencies</div>
+        <div>npm install</div>
+        <div># 5. Start development server</div>
+        <div>npm run dev</div>
+      </div>
+    </div>
+    
+    <div class="action-buttons">
+      <button class="btn btn-primary" onclick="window.location.reload()">
+        🔄 Retry Preview
+      </button>
+      <button class="btn btn-secondary" onclick="copyInstructions()">
+        📋 Copy Instructions
+      </button>
+      <button class="btn btn-secondary" onclick="showFileList()">
+        📁 View Files
+      </button>
+    </div>
+  </div>
+  
+  <script>
+    function copyInstructions() {
+      const instructions = \`# How to Use Your Generated Website
+
+1. Copy all files from the file explorer on the left
+2. Create a new React project:
+   npm create vite@latest my-website -- --template react
+   cd my-website
+
+3. Replace the generated files with your copied files
+4. Install dependencies:
+   npm install
+
+5. Start development server:
+   npm run dev
+
+Your website will be available at http://localhost:5173\`;
+      
+      navigator.clipboard.writeText(instructions).then(() => {
+        alert('Instructions copied to clipboard!');
+      });
+    }
+    
+    function showFileList() {
+      alert('Check the file explorer on the left to see all generated files. You can click on each file to view its contents.');
+    }
+    
+    // Add some interactive effects
+    document.addEventListener('DOMContentLoaded', function() {
+      const cards = document.querySelectorAll('.feature-card');
+      cards.forEach((card, index) => {
+        card.style.animationDelay = \`\${index * 0.1}s\`;
+        card.style.animation = 'fadeInUp 0.6s ease forwards';
+      });
+    });
+    
+    // Add fadeInUp animation
+    const style = document.createElement('style');
+    style.textContent = \`
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(30px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    \`;
+    document.head.appendChild(style);
+  </script>
+</body>
+</html>`;
+      
+      await webcontainer.fs.writeFile('index.html', enhancedHtml);
+      console.log('PreviewFrame: Created enhanced HTML fallback');
+      
+      // Try to serve the HTML file directly
+      try {
+        const server = await webcontainer.spawn('npx', ['serve', '-s', '.', '-l', '3000']);
+        console.log('PreviewFrame: Started simple HTTP server');
+        
+        // Wait a moment for server to start
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Try to get URL from WebContainer
+        try {
+          const url = webcontainer.getURL();
+          console.log('PreviewFrame: Server URL:', url);
+          setPreviewUrl(url);
+          setIsLoading(false);
+          return;
+        } catch (urlErr) {
+          console.log('PreviewFrame: getURL failed, using fallback URL:', urlErr);
+          // Fallback to localhost
+          setPreviewUrl('http://localhost:3000');
+          setIsLoading(false);
+          return;
+        }
+      } catch (serverErr) {
+        console.error('PreviewFrame: Failed to start simple server:', serverErr);
+      }
+      
+      // If server fails, just show the HTML content directly
+      setPreviewUrl('data:text/html;charset=utf-8,' + encodeURIComponent(enhancedHtml));
+      setIsLoading(false);
+      
+    } catch (err) {
+      console.error('PreviewFrame: Failed to create enhanced HTML fallback:', err);
+      setError('Failed to create fallback preview. Please check the console for details.');
+      setIsLoading(false);
+    }
+  };
+
   const showHtmlFallback = async () => {
     if (!webcontainer) return;
     
@@ -200,102 +605,136 @@ export function PreviewFrame({ webcontainer, isReady = false }: PreviewFrameProp
       setIsLoading(true);
       setError(null);
       
-      // Add timeout mechanism to prevent infinite loading
-      const TIMEOUT_MS = 15000; // 15 seconds timeout
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => {
-          reject(new Error('Preview startup timeout - falling back to HTML preview'));
-        }, TIMEOUT_MS);
-      });
+      // Check if package.json exists
+      try {
+        const packageJsonExists = await webcontainer.fs.readFile('package.json', 'utf-8');
+        console.log('PreviewFrame: package.json exists:', !!packageJsonExists);
+      } catch (err) {
+        console.error('PreviewFrame: package.json not found:', err);
+        setError('package.json not found. Cannot start preview.');
+        setIsLoading(false);
+        return;
+      }
 
-      // Race between preview startup and timeout
-      const previewStartup = async () => {
-        // Check if package.json exists
-        try {
-          const packageJsonExists = await webcontainer.fs.readFile('package.json', 'utf-8');
-          console.log('PreviewFrame: package.json exists:', !!packageJsonExists);
-        } catch (err) {
-          console.error('PreviewFrame: package.json not found:', err);
-          setError('package.json not found. Cannot start preview.');
-          setIsLoading(false);
-          return;
-        }
+      // Try multiple npm install strategies
+      console.log('PreviewFrame: Attempting npm install with multiple strategies...');
+      
+      const installStrategies = [
+        // Strategy 1: Standard install
+        ['npm', ['install']],
+        // Strategy 2: Offline-first with reduced logging
+        ['npm', ['install', '--prefer-offline', '--no-audit', '--no-fund', '--loglevel=error']],
+        // Strategy 3: Force install with legacy peer deps
+        ['npm', ['install', '--legacy-peer-deps', '--force']],
+        // Strategy 4: Install with cache disabled
+        ['npm', ['install', '--no-cache', '--prefer-offline']],
+        // Strategy 5: Try yarn as fallback
+        ['yarn', ['install']]
+      ];
 
-        // Install dependencies with optimized flags for faster installation
-        console.log('PreviewFrame: Installing dependencies...');
-        const installProcess = await webcontainer.spawn('npm', ['install', '--prefer-offline', '--no-audit', '--no-fund', '--loglevel=error']);
+      let installSuccess = false;
+      let lastError = null;
+
+      for (let i = 0; i < installStrategies.length; i++) {
+        const [command, args] = installStrategies[i];
+        console.log(`PreviewFrame: Trying strategy ${i + 1}: ${command} ${args.join(' ')}`);
         
-        // Wait for both the process and output to complete with a shorter timeout
-        const installTimeout = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('npm install timeout')), 8000); // 8 second timeout for npm install
-        });
-        
-        let installExitCode;
         try {
+          const installProcess = await webcontainer.spawn(command, args);
+          
+          // Wait for install with timeout
+          const installTimeout = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Install timeout')), 10000); // 10 second timeout
+          });
+          
           const result = await Promise.race([
             installProcess.exit,
             installTimeout
           ]) as [number, void];
-          installExitCode = result[0];
-          console.log('PreviewFrame: npm install exit code:', installExitCode);
-        } catch (installTimeoutError) {
-          console.log('PreviewFrame: npm install timed out, trying to continue with existing files...');
-          installExitCode = 1; // Treat timeout as failure
-        }
-        
-        if (installExitCode !== 0) {
-          console.error('PreviewFrame: npm install failed with exit code:', installExitCode);
-          console.log('PreviewFrame: This is common in WebContainer due to network/security limitations');
           
-          // Show HTML fallback immediately
-          console.log('PreviewFrame: Showing HTML fallback...');
-          await showHtmlFallback();
-          return;
-        }
-
-        // If npm install succeeded, try to start the dev server
-        console.log('PreviewFrame: npm install succeeded! Starting dev server...');
-        const devServerProcess = await webcontainer.spawn('npm', ['run', 'dev']);
-        
-        // Wait for the server to be ready
-        webcontainer.on('server-ready', (port: number, url: string) => {
-          console.log('Server ready on port:', port, 'URL:', url);
-          setPreviewUrl(url);
-          setIsLoading(false);
-        });
-
-        // Add timeout for dev server
-        setTimeout(() => {
-          if (!previewUrl && isLoading) {
-            console.log('PreviewFrame: Dev server timeout, trying to get URL manually...');
-            webcontainer.getURL().then((url: string) => {
-              if (url) {
-                console.log('PreviewFrame: Got URL manually:', url);
-                setPreviewUrl(url);
-                setIsLoading(false);
-              } else {
-                console.log('PreviewFrame: No URL available, using fallback');
-                setPreviewUrl('http://localhost:3000');
-                setIsLoading(false);
-              }
-            }).catch(() => {
-              console.log('PreviewFrame: getURL failed, using fallback');
-              setPreviewUrl('http://localhost:3000');
-              setIsLoading(false);
-            });
+          const exitCode = result[0];
+          console.log(`PreviewFrame: ${command} exit code:`, exitCode);
+          
+          if (exitCode === 0) {
+            console.log(`PreviewFrame: ${command} succeeded!`);
+            installSuccess = true;
+            break;
+          } else {
+            console.log(`PreviewFrame: ${command} failed with exit code ${exitCode}`);
+            lastError = new Error(`${command} failed with exit code ${exitCode}`);
           }
-        }, 8000); // 8 second timeout for dev server
-      }; // End of previewStartup function
+        } catch (err) {
+          console.log(`PreviewFrame: ${command} failed:`, err);
+          lastError = err;
+        }
+      }
+
+      if (!installSuccess) {
+        console.error('PreviewFrame: All npm install strategies failed');
+        console.log('PreviewFrame: This is expected in WebContainer due to network/security limitations');
+        console.log('PreviewFrame: Showing enhanced HTML fallback...');
+        await showEnhancedHtmlFallback();
+        return;
+      }
+
+      // If npm install succeeded, try to start the dev server
+      console.log('PreviewFrame: Dependencies installed successfully! Starting dev server...');
       
-      // Race between preview startup and timeout
-      try {
-        await Promise.race([previewStartup(), timeoutPromise]);
-      } catch (err) {
-        console.error('Preview startup failed or timed out:', err);
+      const devServerStrategies = [
+        ['npm', ['run', 'dev']],
+        ['npm', ['start']],
+        ['yarn', ['dev']],
+        ['yarn', ['start']]
+      ];
+
+      let serverStarted = false;
+
+      for (let i = 0; i < devServerStrategies.length; i++) {
+        const [command, args] = devServerStrategies[i];
+        console.log(`PreviewFrame: Trying to start server with: ${command} ${args.join(' ')}`);
         
-        // Show HTML fallback
-        console.log('PreviewFrame: Showing HTML fallback');
-        await showHtmlFallback();
+        try {
+          const devServerProcess = await webcontainer.spawn(command, args);
+          
+          // Wait for server with timeout
+          const serverTimeout = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Server startup timeout')), 12000); // 12 second timeout
+          });
+          
+          // Listen for server-ready event
+          const serverReady = new Promise((resolve) => {
+            webcontainer.on('server-ready', (port: number, url: string) => {
+              console.log('Server ready on port:', port, 'URL:', url);
+              setPreviewUrl(url);
+              setIsLoading(false);
+              resolve(true);
+            });
+          });
+          
+          await Promise.race([serverReady, serverTimeout]);
+          serverStarted = true;
+          break;
+          
+        } catch (err) {
+          console.log(`PreviewFrame: ${command} ${args.join(' ')} failed:`, err);
+        }
+      }
+
+      if (!serverStarted) {
+        console.log('PreviewFrame: All server strategies failed, trying manual URL detection...');
+        try {
+          const url = await webcontainer.getURL();
+          if (url) {
+            console.log('PreviewFrame: Got URL manually:', url);
+            setPreviewUrl(url);
+            setIsLoading(false);
+          } else {
+            throw new Error('No URL available');
+          }
+        } catch (err) {
+          console.log('PreviewFrame: Manual URL detection failed, using fallback');
+          await showEnhancedHtmlFallback();
+        }
       }
 
     } catch (err) {
