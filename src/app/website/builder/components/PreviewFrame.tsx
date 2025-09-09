@@ -19,7 +19,12 @@ export function PreviewFrame({ webcontainer, isReady = false }: PreviewFrameProp
   }, [webcontainer, isReady]);
 
   const createWorkingHtmlPreview = async () => {
-    if (!webcontainer) return null;
+    if (!webcontainer) {
+      console.log('PreviewFrame: createWorkingHtmlPreview - No webcontainer available');
+      return null;
+    }
+    
+    console.log('PreviewFrame: createWorkingHtmlPreview - Starting to create CDN-based HTML preview');
     
     try {
       // Read the generated files to create a working HTML preview
@@ -234,6 +239,7 @@ body {
 </body>
 </html>`;
       
+      console.log('PreviewFrame: createWorkingHtmlPreview - Successfully created CDN-based HTML preview');
       return workingHtml;
       
     } catch (err) {
@@ -845,6 +851,8 @@ Your website will be available at http://localhost:5173\`;
       
       // Create a working HTML file that includes all necessary dependencies via CDN
       const workingHtml = await createWorkingHtmlPreview();
+      
+      console.log('PreviewFrame: createWorkingHtmlPreview result:', workingHtml ? 'SUCCESS' : 'FAILED');
       
       if (workingHtml) {
         await webcontainer.fs.writeFile('index.html', workingHtml);

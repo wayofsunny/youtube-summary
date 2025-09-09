@@ -140,7 +140,7 @@ function WebsiteBuilderContent() {
   async function init() {
     if (!prompt.trim()) return;
     
-    const response = await axios.post(`${BACKEND_URL}/template`, {
+    const response = await axios.post(`${BACKEND_URL}/api/website/template`, {
       prompt: prompt.trim()
     });
     setTemplateSet(true);
@@ -153,7 +153,7 @@ function WebsiteBuilderContent() {
     })));
 
     setLoading(true);
-    const stepsResponse = await axios.post(`${BACKEND_URL}/chat`, {
+    const stepsResponse = await axios.post(`${BACKEND_URL}/api/website/chat`, {
       messages: [...prompts, prompt].map(content => ({
         role: "user",
         content
@@ -191,7 +191,7 @@ function WebsiteBuilderContent() {
 
     setLoading(true);
     try {
-      const stepsResponse = await axios.post(`${BACKEND_URL}/chat`, {
+      const stepsResponse = await axios.post(`${BACKEND_URL}/api/website/chat`, {
         messages: [...llmMessages, newMessage]
       });
       setLoading(false);
