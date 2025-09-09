@@ -240,7 +240,7 @@ button:focus-visible {
           
           // Start dev server
           console.log('PreviewFrame: Starting dev server...');
-          const devProcess = await webcontainer.spawn('npm', ['run', 'dev']);
+          const devServerProcess = await webcontainer.spawn('npm', ['run', 'dev']);
           
           // Wait for server to start
           await new Promise(resolve => setTimeout(resolve, 5000)); // Longer wait for WebContainer
@@ -460,7 +460,7 @@ button:focus-visible {
       const ENABLE_STREAM_LOGGING = true;
       
       // Add timeout mechanism to prevent infinite loading
-      const TIMEOUT_MS = 30000; // 30 seconds timeout
+      const TIMEOUT_MS = 15000; // 15 seconds timeout (reduced from 30)
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => {
           reject(new Error('Preview startup timeout - falling back to HTML preview'));
@@ -481,9 +481,9 @@ button:focus-visible {
           return;
         }
 
-      // Install dependencies
+      // Install dependencies with optimized flags for faster installation
       console.log('PreviewFrame: Installing dependencies...');
-      const installProcess = await webcontainer.spawn('npm', ['install']);
+      const installProcess = await webcontainer.spawn('npm', ['install', '--prefer-offline', '--no-audit', '--no-fund', '--loglevel=error']);
       
       // Capture npm install output for debugging
       let installOutput = '';
@@ -518,375 +518,37 @@ button:focus-visible {
         }
       })();
       
-      // Wait for both the process and output to complete
-      const [installExitCode] = await Promise.all([installProcess.exit, installOutputPromise]);
-      console.log('PreviewFrame: npm install exit code:', installExitCode);
-      console.log('PreviewFrame: npm install full output:', installOutput);
+      // Wait for both the process and output to complete with a shorter timeout
+      const installTimeout = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('npm install timeout')), 8000); // 8 second timeout for npm install
+      });
+      
+      let installExitCode;
+      try {
+        const result = await Promise.race([
+          Promise.all([installProcess.exit, installOutputPromise]),
+          installTimeout
+        ]) as [number, void];
+        installExitCode = result[0];
+        console.log('PreviewFrame: npm install exit code:', installExitCode);
+        console.log('PreviewFrame: npm install full output:', installOutput);
+      } catch (installTimeoutError) {
+        console.log('PreviewFrame: npm install timed out, trying to continue with existing files...');
+        installExitCode = 1; // Treat timeout as failure
+      }
       
       if (installExitCode !== 0) {
         console.error('PreviewFrame: npm install failed with exit code:', installExitCode);
         
-        // Try to get more details about the failure
-        try {
-          const packageJsonContent = await webcontainer.fs.readFile('package.json', 'utf-8');
-          console.log('PreviewFrame: package.json content:', packageJsonContent);
-          
-          // Try to parse and validate package.json
-          try {
-            const packageJson = JSON.parse(packageJsonContent);
-            console.log('PreviewFrame: package.json parsed successfully:', packageJson);
-            
-            // Check for common issues
-            if (!packageJson.dependencies && !packageJson.devDependencies) {
-              console.warn('PreviewFrame: package.json has no dependencies');
-            }
-            if (!packageJson.scripts || !packageJson.scripts.dev) {
-              console.warn('PreviewFrame: package.json missing dev script');
-            }
-          } catch (parseErr) {
-            console.error('PreviewFrame: package.json is not valid JSON:', parseErr);
-          }
-        } catch (err) {
-          console.error('PreviewFrame: Could not read package.json:', err);
-        }
-        
-        // Try npm install --force as fallback
-        console.log('PreviewFrame: Trying npm install --force...');
-        const forceInstallProcess = await webcontainer.spawn('npm', ['install', '--force']);
-        
-        // Capture force install output for debugging
-        let forceInstallOutput = '';
-        const forceOutputReader = forceInstallProcess.output.getReader();
-        const forceOutputPromise = (async () => {
-          try {
-            while (true) {
-              const { done, value } = await forceOutputReader.read();
-              if (done) break;
-              
-              // Validate data before decoding
-              if (value && value instanceof Uint8Array) {
-                try {
-                  const output = new TextDecoder().decode(value);
-                  forceInstallOutput += output;
-                  if (ENABLE_STREAM_LOGGING) {
-                    console.log('npm install --force output:', output);
-                  }
-                } catch (decodeErr) {
-                  console.log('npm install --force decode error:', decodeErr);
-                }
-              }
-            }
-          } catch (err) {
-            console.log('npm install --force output stream ended:', err);
-          } finally {
-            try {
-              forceOutputReader.releaseLock();
-            } catch (releaseErr) {
-              console.log('npm install --force release lock error:', releaseErr);
-            }
-          }
-        })();
-        
-        // Wait for both the process and output to complete
-        const [forceInstallExitCode] = await Promise.all([forceInstallProcess.exit, forceOutputPromise]);
-        console.log('PreviewFrame: npm install --force exit code:', forceInstallExitCode);
-        console.log('PreviewFrame: npm install --force full output:', forceInstallOutput);
-        
-        if (forceInstallExitCode !== 0) {
-          // Try with a minimal package.json as last resort
-          console.log('PreviewFrame: Trying with minimal package.json...');
-          try {
-            const minimalPackageJson = {
-              "name": "webcontainer-app",
-              "version": "1.0.0",
-              "type": "module",
-              "scripts": {
-                "dev": "vite --host 0.0.0.0 --port 3000",
-                "build": "vite build",
-                "preview": "vite preview"
-              },
-              "dependencies": {
-                "react": "^18.2.0",
-                "react-dom": "^18.2.0"
-              },
-              "devDependencies": {
-                "@types/react": "^18.2.0",
-                "@types/react-dom": "^18.2.0",
-                "@vitejs/plugin-react": "^4.0.0",
-                "vite": "^4.4.0"
-              }
-            };
-            
-            // Also create a basic vite.config.js
-            const viteConfig = `import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    host: '0.0.0.0',
-    port: 3000
-  }
-})`;
-            
-            await webcontainer.fs.writeFile('vite.config.js', viteConfig);
-            
-            await webcontainer.fs.writeFile('package.json', JSON.stringify(minimalPackageJson, null, 2));
-            console.log('PreviewFrame: Created minimal package.json');
-            
-            // Create basic React files if they don't exist
-            try {
-              await webcontainer.fs.readFile('src/main.jsx', 'utf-8');
-            } catch {
-              console.log('PreviewFrame: Creating src/main.jsx...');
-              const mainJsx = `import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
-import './index.css'
-
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-)`;
-              await webcontainer.fs.writeFile('src/main.jsx', mainJsx);
-            }
-            
-            try {
-              await webcontainer.fs.readFile('src/App.jsx', 'utf-8');
-            } catch {
-              console.log('PreviewFrame: Creating src/App.jsx...');
-              const appJsx = `import { useState } from 'react'
-import './App.css'
-
-function App() {
-  const [count, setCount] = useState(0)
-
-  return (
-    <div className="App">
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-    </div>
-  )
-}
-
-export default App`;
-              await webcontainer.fs.writeFile('src/App.jsx', appJsx);
-            }
-            
-            try {
-              await webcontainer.fs.readFile('src/index.css', 'utf-8');
-            } catch {
-              console.log('PreviewFrame: Creating src/index.css...');
-              const indexCss = `:root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-}`;
-              await webcontainer.fs.writeFile('src/index.css', indexCss);
-            }
-            
-            try {
-              await webcontainer.fs.readFile('src/App.css', 'utf-8');
-            } catch {
-              console.log('PreviewFrame: Creating src/App.css...');
-              const appCss = `.App {
-  text-align: center;
-}
-
-.card {
-  padding: 2em;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  color: white;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-
-button:hover {
-  border-color: #646cff;
-}
-
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}`;
-              await webcontainer.fs.writeFile('src/App.css', appCss);
-            }
-            
-            const minimalInstallProcess = await webcontainer.spawn('npm', ['install', '--force']);
-            const minimalInstallExitCode = await minimalInstallProcess.exit;
-            console.log('PreviewFrame: Minimal npm install exit code:', minimalInstallExitCode);
-            
-            if (minimalInstallExitCode !== 0) {
-              console.log('PreviewFrame: Even minimal npm install failed, trying HTML fallback...');
-              
-              // Create a simple HTML file that can be served without npm
-              const simpleHtml = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Generated App</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      margin: 0;
-      padding: 20px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .container {
-      text-align: center;
-      max-width: 600px;
-      padding: 40px;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 20px;
-      backdrop-filter: blur(10px);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    }
-    h1 {
-      font-size: 3rem;
-      margin-bottom: 20px;
-      background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    .status {
-      background: rgba(76, 175, 80, 0.2);
-      border: 1px solid rgba(76, 175, 80, 0.5);
-      padding: 15px;
-      border-radius: 10px;
-      margin: 20px 0;
-    }
-    .features {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 20px;
-      margin-top: 30px;
-    }
-    .feature {
-      background: rgba(255, 255, 255, 0.1);
-      padding: 20px;
-      border-radius: 10px;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-    }
-    .feature h3 {
-      margin-top: 0;
-      color: #4ecdc4;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>🚀 Your App is Ready!</h1>
-    <div class="status">
-      <strong>✅ WebContainer Initialized Successfully</strong><br>
-      Your application has been generated and is ready to use.
-    </div>
-    
-    <p>This is a fallback preview since npm install encountered issues, but your code has been successfully generated!</p>
-    
-    <div class="features">
-      <div class="feature">
-        <h3>📁 Files Created</h3>
-        <p>All project files have been generated and are available in the file explorer.</p>
-      </div>
-      <div class="feature">
-        <h3>⚡ WebContainer Active</h3>
-        <p>The development environment is running and ready for your code.</p>
-      </div>
-      <div class="feature">
-        <h3>🛠️ Next Steps</h3>
-        <p>Copy the generated code and create your project manually, or try refreshing to retry the preview.</p>
-      </div>
-    </div>
-  </div>
-</body>
-</html>`;
-              
-              await webcontainer.fs.writeFile('index.html', simpleHtml);
-              console.log('PreviewFrame: Created HTML fallback');
-              
-              // Try to serve the HTML file directly
-              try {
-                const server = await webcontainer.spawn('npx', ['serve', '-s', '.', '-l', '3000']);
-                console.log('PreviewFrame: Started simple HTTP server');
-                
-                // Wait a moment for server to start
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                
-                const url = webcontainer.getURL();
-                console.log('PreviewFrame: Server URL:', url);
-                setPreviewUrl(url);
-                setIsLoading(false);
-                return;
-              } catch (serverErr) {
-                console.error('PreviewFrame: Failed to start simple server:', serverErr);
-              }
-              
-              setError(`Failed to install dependencies (exit code: ${installExitCode}). Check console for details.`);
-              setIsLoading(false);
-              return;
-            }
-            
-            console.log('PreviewFrame: Minimal npm install succeeded!');
-          } catch (err) {
-            console.error('PreviewFrame: Failed to create minimal package.json:', err);
-            setError(`Failed to install dependencies (exit code: ${installExitCode}). Check console for details.`);
-            setIsLoading(false);
-            return;
-          }
-        } else {
-          console.log('PreviewFrame: npm install --force succeeded!');
-        }
+        // Skip the complex retry logic and go straight to HTML fallback for faster response
+        console.log('PreviewFrame: npm install failed, showing HTML fallback immediately...');
+        await showHtmlFallback();
+        return;
       }
 
-      // Start the dev server
-      console.log('PreviewFrame: Starting dev server...');
-      const devProcess = await webcontainer.spawn('npm', ['run', 'dev']);
+      // If npm install succeeded, start the dev server
+      console.log('PreviewFrame: npm install succeeded! Starting dev server...');
+      const devServerProcess = await webcontainer.spawn('npm', ['run', 'dev']);
       
       // Wait for the server to be ready
       webcontainer.on('server-ready', (port: number, url: string) => {
@@ -919,7 +581,7 @@ button:focus-visible {
 
       // Also listen for process output to detect when server is ready (if enabled)
       if (ENABLE_STREAM_LOGGING) {
-        const devOutputReader = devProcess.output.getReader();
+        const devOutputReader = devServerProcess.output.getReader();
         const devOutputPromise = (async () => {
           try {
             while (true) {
