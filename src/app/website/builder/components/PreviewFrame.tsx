@@ -18,6 +18,230 @@ export function PreviewFrame({ webcontainer, isReady = false }: PreviewFrameProp
     }
   }, [webcontainer, isReady]);
 
+  const createWorkingHtmlPreview = async () => {
+    if (!webcontainer) return null;
+    
+    try {
+      // Read the generated files to create a working HTML preview
+      let appJsx = '';
+      let mainJsx = '';
+      let indexCss = '';
+      let appCss = '';
+      
+      try {
+        appJsx = await webcontainer.fs.readFile('src/App.jsx', 'utf-8') || '';
+      } catch (err) {
+        console.log('PreviewFrame: App.jsx not found, using default');
+        appJsx = `import React from 'react';
+import './App.css';
+
+function App() {
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>Welcome to Your Generated Website!</h1>
+        <p>This is a preview of your generated website.</p>
+        <div className="features">
+          <div className="feature">
+            <h3>🚀 Generated with AI</h3>
+            <p>Your website was created using advanced AI technology</p>
+          </div>
+          <div className="feature">
+            <h3>⚡ Modern React</h3>
+            <p>Built with React and modern web technologies</p>
+          </div>
+          <div className="feature">
+            <h3>🎨 Beautiful Design</h3>
+            <p>Responsive and modern design patterns</p>
+          </div>
+        </div>
+      </header>
+    </div>
+  );
+}
+
+export default App;`;
+      }
+      
+      try {
+        mainJsx = await webcontainer.fs.readFile('src/main.jsx', 'utf-8') || '';
+      } catch (err) {
+        console.log('PreviewFrame: main.jsx not found, using default');
+        mainJsx = `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App.jsx';
+import './index.css';
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);`;
+      }
+      
+      try {
+        indexCss = await webcontainer.fs.readFile('src/index.css', 'utf-8') || '';
+      } catch (err) {
+        console.log('PreviewFrame: index.css not found, using default');
+        indexCss = `* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+}`;
+      }
+      
+      try {
+        appCss = await webcontainer.fs.readFile('src/App.css', 'utf-8') || '';
+      } catch (err) {
+        console.log('PreviewFrame: App.css not found, using default');
+        appCss = `.App {
+  text-align: center;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.App-header {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 40px;
+  border-radius: 20px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  color: white;
+  max-width: 800px;
+  margin: 20px;
+}
+
+.App-header h1 {
+  font-size: 2.5rem;
+  margin-bottom: 20px;
+  background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.App-header p {
+  font-size: 1.2rem;
+  margin-bottom: 30px;
+  opacity: 0.9;
+}
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin-top: 30px;
+}
+
+.feature {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 20px;
+  border-radius: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.feature h3 {
+  margin-bottom: 10px;
+  color: #4ecdc4;
+}
+
+.feature p {
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+@media (max-width: 768px) {
+  .App-header {
+    padding: 20px;
+    margin: 10px;
+  }
+  
+  .App-header h1 {
+    font-size: 2rem;
+  }
+  
+  .features {
+    grid-template-columns: 1fr;
+  }
+}`;
+      }
+      
+      // Create a working HTML file with CDN dependencies
+      const workingHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generated Website Preview</title>
+  <style>
+    ${indexCss}
+    ${appCss}
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <!-- React and ReactDOM from CDN -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  
+  <!-- Babel for JSX transformation -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <script type="text/babel">
+    // App component
+    ${appJsx}
+    
+    // Main entry point
+    ${mainJsx}
+  </script>
+  
+  <style>
+    /* Additional styles for better preview */
+    .preview-notice {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: rgba(76, 175, 80, 0.9);
+      color: white;
+      padding: 10px 15px;
+      border-radius: 5px;
+      font-size: 12px;
+      z-index: 1000;
+      backdrop-filter: blur(10px);
+    }
+    
+    .preview-notice::before {
+      content: "✅ ";
+    }
+  </style>
+  
+  <div class="preview-notice">
+    Live Preview - No npm install required!
+  </div>
+</body>
+</html>`;
+      
+      return workingHtml;
+      
+    } catch (err) {
+      console.error('PreviewFrame: Failed to create working HTML preview:', err);
+      return null;
+    }
+  };
+
   const showEnhancedHtmlFallback = async () => {
     if (!webcontainer) return;
     
@@ -616,126 +840,51 @@ Your website will be available at http://localhost:5173\`;
         return;
       }
 
-      // Try multiple npm install strategies
-      console.log('PreviewFrame: Attempting npm install with multiple strategies...');
+      // Skip npm install entirely and create a working HTML preview
+      console.log('PreviewFrame: Skipping npm install (WebContainer limitation) and creating direct HTML preview...');
       
-      const installStrategies = [
-        // Strategy 1: Standard install
-        ['npm', ['install']],
-        // Strategy 2: Offline-first with reduced logging
-        ['npm', ['install', '--prefer-offline', '--no-audit', '--no-fund', '--loglevel=error']],
-        // Strategy 3: Force install with legacy peer deps
-        ['npm', ['install', '--legacy-peer-deps', '--force']],
-        // Strategy 4: Install with cache disabled
-        ['npm', ['install', '--no-cache', '--prefer-offline']],
-        // Strategy 5: Try yarn as fallback
-        ['yarn', ['install']]
-      ];
-
-      let installSuccess = false;
-      let lastError = null;
-
-      for (let i = 0; i < installStrategies.length; i++) {
-        const [command, args] = installStrategies[i];
-        console.log(`PreviewFrame: Trying strategy ${i + 1}: ${command} ${args.join(' ')}`);
+      // Create a working HTML file that includes all necessary dependencies via CDN
+      const workingHtml = await createWorkingHtmlPreview();
+      
+      if (workingHtml) {
+        await webcontainer.fs.writeFile('index.html', workingHtml);
+        console.log('PreviewFrame: Created working HTML preview with CDN dependencies');
         
+        // Try to serve the HTML file directly
         try {
-          const installProcess = await webcontainer.spawn(command, args);
+          const server = await webcontainer.spawn('npx', ['serve', '-s', '.', '-l', '3000']);
+          console.log('PreviewFrame: Started simple HTTP server');
           
-          // Wait for install with timeout
-          const installTimeout = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Install timeout')), 10000); // 10 second timeout
-          });
+          // Wait a moment for server to start
+          await new Promise(resolve => setTimeout(resolve, 2000));
           
-          const result = await Promise.race([
-            installProcess.exit,
-            installTimeout
-          ]) as [number, void];
-          
-          const exitCode = result[0];
-          console.log(`PreviewFrame: ${command} exit code:`, exitCode);
-          
-          if (exitCode === 0) {
-            console.log(`PreviewFrame: ${command} succeeded!`);
-            installSuccess = true;
-            break;
-          } else {
-            console.log(`PreviewFrame: ${command} failed with exit code ${exitCode}`);
-            lastError = new Error(`${command} failed with exit code ${exitCode}`);
+          // Try to get URL from WebContainer
+          try {
+            const url = webcontainer.getURL();
+            console.log('PreviewFrame: Server URL:', url);
+            setPreviewUrl(url);
+            setIsLoading(false);
+            return;
+          } catch (urlErr) {
+            console.log('PreviewFrame: getURL failed, using fallback URL:', urlErr);
+            // Fallback to localhost
+            setPreviewUrl('http://localhost:3000');
+            setIsLoading(false);
+            return;
           }
-        } catch (err) {
-          console.log(`PreviewFrame: ${command} failed:`, err);
-          lastError = err;
+        } catch (serverErr) {
+          console.error('PreviewFrame: Failed to start simple server:', serverErr);
         }
-      }
-
-      if (!installSuccess) {
-        console.error('PreviewFrame: All npm install strategies failed');
-        console.log('PreviewFrame: This is expected in WebContainer due to network/security limitations');
-        console.log('PreviewFrame: Showing enhanced HTML fallback...');
-        await showEnhancedHtmlFallback();
+        
+        // If server fails, just show the HTML content directly
+        setPreviewUrl('data:text/html;charset=utf-8,' + encodeURIComponent(workingHtml));
+        setIsLoading(false);
         return;
       }
 
-      // If npm install succeeded, try to start the dev server
-      console.log('PreviewFrame: Dependencies installed successfully! Starting dev server...');
-      
-      const devServerStrategies = [
-        ['npm', ['run', 'dev']],
-        ['npm', ['start']],
-        ['yarn', ['dev']],
-        ['yarn', ['start']]
-      ];
-
-      let serverStarted = false;
-
-      for (let i = 0; i < devServerStrategies.length; i++) {
-        const [command, args] = devServerStrategies[i];
-        console.log(`PreviewFrame: Trying to start server with: ${command} ${args.join(' ')}`);
-        
-        try {
-          const devServerProcess = await webcontainer.spawn(command, args);
-          
-          // Wait for server with timeout
-          const serverTimeout = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Server startup timeout')), 12000); // 12 second timeout
-          });
-          
-          // Listen for server-ready event
-          const serverReady = new Promise((resolve) => {
-            webcontainer.on('server-ready', (port: number, url: string) => {
-              console.log('Server ready on port:', port, 'URL:', url);
-              setPreviewUrl(url);
-              setIsLoading(false);
-              resolve(true);
-            });
-          });
-          
-          await Promise.race([serverReady, serverTimeout]);
-          serverStarted = true;
-          break;
-          
-        } catch (err) {
-          console.log(`PreviewFrame: ${command} ${args.join(' ')} failed:`, err);
-        }
-      }
-
-      if (!serverStarted) {
-        console.log('PreviewFrame: All server strategies failed, trying manual URL detection...');
-        try {
-          const url = await webcontainer.getURL();
-          if (url) {
-            console.log('PreviewFrame: Got URL manually:', url);
-            setPreviewUrl(url);
-            setIsLoading(false);
-          } else {
-            throw new Error('No URL available');
-          }
-        } catch (err) {
-          console.log('PreviewFrame: Manual URL detection failed, using fallback');
-          await showEnhancedHtmlFallback();
-        }
-      }
+      // If HTML creation fails, show enhanced fallback
+      console.log('PreviewFrame: HTML creation failed, showing enhanced fallback...');
+      await showEnhancedHtmlFallback();
 
     } catch (err) {
       console.error('Failed to start preview:', err);
