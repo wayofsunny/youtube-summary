@@ -223,12 +223,12 @@ button:focus-visible {
       console.log('PreviewFrame: Installing dependencies for working React app...');
       console.log('PreviewFrame: WebContainer limitations may affect npm install performance');
       
-      const installProcess = await webcontainer.spawn('npm', ['install', '--force', '--no-audit', '--no-fund']);
+      const installProcess = await webcontainer.spawn('npm', ['install', '--force', '--no-audit', '--no-fund', '--loglevel=error']);
       
       // Wait for install with timeout
       const installPromise = installProcess.exit;
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Install timeout - WebContainer limitations')), 20000); // 20 second timeout
+        setTimeout(() => reject(new Error('Install timeout - WebContainer limitations')), 10000); // 10 second timeout
       });
       
       try {
@@ -243,7 +243,7 @@ button:focus-visible {
           const devServerProcess = await webcontainer.spawn('npm', ['run', 'dev']);
           
           // Wait for server to start
-          await new Promise(resolve => setTimeout(resolve, 5000)); // Longer wait for WebContainer
+          await new Promise(resolve => setTimeout(resolve, 3000)); // Shorter wait
           
           // Try to get URL
           try {
@@ -376,6 +376,9 @@ button:focus-visible {
         <li><strong>Native modules:</strong> Not supported in browser environment</li>
       </ul>
       <p style="margin: 10px 0; font-size: 14px;"><strong>Solution:</strong> Copy the generated code and run it locally for full functionality.</p>
+      <div style="background: rgba(76, 175, 80, 0.1); border: 1px solid rgba(76, 175, 80, 0.5); padding: 10px; border-radius: 5px; margin-top: 10px;">
+        <p style="margin: 0; font-size: 13px; color: #4caf50;"><strong>✅ Good News:</strong> Your code has been successfully generated! The WebContainer limitation doesn't affect the quality of your generated application.</p>
+      </div>
     </div>
     
     <div class="features">
@@ -539,10 +542,17 @@ button:focus-visible {
       
       if (installExitCode !== 0) {
         console.error('PreviewFrame: npm install failed with exit code:', installExitCode);
+        console.log('PreviewFrame: This is common in WebContainer due to network/security limitations');
         
-        // Skip the complex retry logic and go straight to HTML fallback for faster response
-        console.log('PreviewFrame: npm install failed, showing HTML fallback immediately...');
-        await showHtmlFallback();
+        // Try to create a working React app first before falling back to HTML
+        console.log('PreviewFrame: Attempting to create working React app...');
+        const reactAppSuccess = await createWorkingReactApp();
+        
+        if (!reactAppSuccess) {
+          // If React app creation fails, show HTML fallback
+          console.log('PreviewFrame: React app creation failed, showing HTML fallback');
+          await showHtmlFallback();
+        }
         return;
       }
 
