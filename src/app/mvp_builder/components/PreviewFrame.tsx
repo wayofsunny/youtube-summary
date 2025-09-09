@@ -465,7 +465,7 @@ button:focus-visible {
       
       try {
         appJsx = await webcontainer.fs.readFile('src/App.jsx', 'utf-8') || '';
-      } catch (err) {
+        } catch (err) {
         console.log('PreviewFrame: App.jsx not found, using default');
         appJsx = `import { useState } from 'react'
 import './App.css'
@@ -495,9 +495,9 @@ function App() {
 }
 
 export default App`;
-      }
-      
-      try {
+            }
+            
+            try {
         mainJsx = await webcontainer.fs.readFile('src/main.jsx', 'utf-8') || '';
       } catch (err) {
         console.log('PreviewFrame: main.jsx not found, using default');
@@ -545,9 +545,9 @@ body {
   padding: 2rem;
   text-align: center;
 }`;
-      }
-      
-      try {
+            }
+            
+            try {
         appCss = await webcontainer.fs.readFile('src/App.css', 'utf-8') || '';
       } catch (err) {
         console.log('PreviewFrame: App.css not found, using default');
@@ -643,7 +643,7 @@ button:hover {
   </div>
 </body>
 </html>`;
-      
+              
       console.log('PreviewFrame: createCDNBasedPreview - Successfully created CDN-based HTML preview');
       return workingHtml;
       
@@ -656,9 +656,9 @@ button:hover {
   const startPreview = async () => {
     if (!webcontainer) {
       console.log('PreviewFrame: No webcontainer available');
-      return;
-    }
-
+              return;
+            }
+            
     console.log('PreviewFrame: Starting preview...');
     try {
       setIsLoading(true);
@@ -668,11 +668,11 @@ button:hover {
       try {
         const packageJsonExists = await webcontainer.fs.readFile('package.json', 'utf-8');
         console.log('PreviewFrame: package.json exists:', !!packageJsonExists);
-      } catch (err) {
+          } catch (err) {
         console.error('PreviewFrame: package.json not found:', err);
         setError('package.json not found. Cannot start preview.');
-        setIsLoading(false);
-        return;
+            setIsLoading(false);
+            return;
       }
 
       // Skip npm install entirely and create a working HTML preview
@@ -700,13 +700,13 @@ button:hover {
             // WebContainer doesn't have getURL method, use localhost fallback
             console.log('PreviewFrame: Using localhost fallback URL');
             setPreviewUrl('http://localhost:3000');
-            setIsLoading(false);
+                        setIsLoading(false);
             return;
           } catch (urlErr) {
             console.log('PreviewFrame: URL setup failed, using fallback URL:', urlErr);
             // Fallback to localhost
-            setPreviewUrl('http://localhost:3000');
-            setIsLoading(false);
+                      setPreviewUrl('http://localhost:3000');
+                      setIsLoading(false);
             return;
           }
         } catch (serverErr) {
@@ -721,7 +721,7 @@ button:hover {
 
       // If HTML creation fails, show enhanced fallback
       console.log('PreviewFrame: HTML creation failed, showing enhanced fallback...');
-      await showHtmlFallback();
+          await showHtmlFallback();
 
     } catch (err) {
       console.error('Failed to start preview:', err);
@@ -761,6 +761,14 @@ button:hover {
               </span>
             </div>
           </div>
+          
+          {webcontainer && (
+            <div className="mt-4 p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+              <p className="text-blue-200 text-sm">
+                ✅ WebContainer is ready! Generate your MVP first, then the preview will appear here.
+              </p>
+            </div>
+          )}
           
           {!isWebContainerSupported && (
             <div className="mt-6 p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
