@@ -737,7 +737,7 @@ export default function MVPBuilderPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-white via-blue-100 to-purple-100 drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
-                  Website Builder
+                  MVP Builder
                 </h1>
                 <p className="text-sm text-gray-300 mt-2">Prompt: {prompt}</p>
               </div>
