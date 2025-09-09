@@ -8,6 +8,13 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'dummy-key-for-testing',
 });
 
+// CORS headers helper
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
 
 export async function GET() {
   // Health check endpoint
@@ -15,6 +22,15 @@ export async function GET() {
     status: 'ok',
     hasOpenAIKey: !!(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'dummy-key-for-testing'),
     timestamp: new Date().toISOString()
+  }, {
+    headers: corsHeaders
+  });
+}
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 200,
+    headers: corsHeaders
   });
 }
 
@@ -26,7 +42,7 @@ export async function POST(request: NextRequest) {
     if (!type) {
       return NextResponse.json(
         { error: 'Missing required field: type' },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
     
@@ -48,6 +64,8 @@ export async function POST(request: NextRequest) {
             'Create src/App.jsx with basic component',
             'Create src/index.css for styling'
           ]
+        }, {
+          headers: corsHeaders
         });
       }
       
@@ -57,12 +75,14 @@ export async function POST(request: NextRequest) {
             'Create additional React components',
             'Add more styling and functionality'
           ]
+        }, {
+          headers: corsHeaders
         });
       }
       
       return NextResponse.json(
         { error: 'OpenAI API key not configured. Please set OPENAI_API_KEY environment variable.' },
-        { status: 500 }
+        { status: 500, headers: corsHeaders }
       );
     }
     
@@ -73,7 +93,7 @@ export async function POST(request: NextRequest) {
       if (!prompt || typeof prompt !== 'string') {
         return NextResponse.json(
           { error: 'Missing or invalid prompt for template request' },
-          { status: 400 }
+          { status: 400, headers: corsHeaders }
         );
       }
 
@@ -100,13 +120,15 @@ export async function POST(request: NextRequest) {
       const answer = response.choices[0]?.message?.content?.trim().toLowerCase();
 
       if (answer === 'react') {
-        return NextResponse.json({
-          prompts: [
-            BASE_PROMPT, 
-            `Here is an artifact that contains all files of the project visible to you.\nConsider the contents of ALL files in the project.\n\n${reactBasePrompt}\n\nHere is a list of files that exist on the file system but are not being shown to you:\n\n  - .gitignore\n  - package-lock.json\n`
-          ],
-          uiPrompts: [reactBasePrompt]
-        });
+      return NextResponse.json({
+        prompts: [
+          BASE_PROMPT, 
+          `Here is an artifact that contains all files of the project visible to you.\nConsider the contents of ALL files in the project.\n\n${reactBasePrompt}\n\nHere is a list of files that exist on the file system but are not being shown to you:\n\n  - .gitignore\n  - package-lock.json\n`
+        ],
+        uiPrompts: [reactBasePrompt]
+      }, {
+        headers: corsHeaders
+      });
       }
 
       if (answer === 'node') {
@@ -116,12 +138,14 @@ export async function POST(request: NextRequest) {
             `Here is an artifact that contains all files of the project visible to you.\nConsider the contents of ALL files in the project.\n\n${nodeBasePrompt}\n\nHere is a list of files that exist on the file system but are not being shown to you:\n\n  - .gitignore\n  - package-lock.json\n`
           ],
           uiPrompts: [nodeBasePrompt]
+        }, {
+          headers: corsHeaders
         });
       }
 
       return NextResponse.json(
         { error: 'Unable to determine project type' },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -130,7 +154,7 @@ export async function POST(request: NextRequest) {
       if (!messages || !Array.isArray(messages)) {
         return NextResponse.json(
           { error: 'Missing or invalid messages for chat request' },
-          { status: 400 }
+          { status: 400, headers: corsHeaders }
         );
       }
 
@@ -139,7 +163,7 @@ export async function POST(request: NextRequest) {
         if (!msg.role || !msg.content || !['user', 'assistant'].includes(msg.role)) {
           return NextResponse.json(
             { error: 'Invalid message format. Each message must have role (user|assistant) and content' },
-            { status: 400 }
+            { status: 400, headers: corsHeaders }
           );
         }
       }
@@ -171,12 +195,14 @@ export async function POST(request: NextRequest) {
       
       return NextResponse.json({
         response: aiResponse
+      }, {
+        headers: corsHeaders
       });
     }
 
     return NextResponse.json(
       { error: 'Invalid request type' },
-      { status: 400 }
+      { status: 400, headers: corsHeaders }
     );
 
   } catch (error) {
@@ -187,26 +213,26 @@ export async function POST(request: NextRequest) {
       if (error.message.includes('API key')) {
         return NextResponse.json(
           { error: 'Invalid OpenAI API key' },
-          { status: 401 }
+          { status: 401, headers: corsHeaders }
         );
       }
       if (error.message.includes('rate limit')) {
         return NextResponse.json(
           { error: 'OpenAI API rate limit exceeded. Please try again later.' },
-          { status: 429 }
+          { status: 429, headers: corsHeaders }
         );
       }
       if (error.message.includes('quota')) {
         return NextResponse.json(
           { error: 'OpenAI API quota exceeded. Please check your billing.' },
-          { status: 402 }
+          { status: 402, headers: corsHeaders }
         );
       }
     }
     
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
