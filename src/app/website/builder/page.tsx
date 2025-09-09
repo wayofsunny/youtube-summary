@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { StepsList } from './components/StepsList';
 import { FileExplorer } from './components/FileExplorer';
@@ -16,7 +16,7 @@ import { Loader } from './components/Loader';
 import { ArrowLeft, Send } from 'lucide-react';
 import Link from 'next/link';
 
-export default function WebsiteBuilder() {
+function WebsiteBuilderContent() {
   const searchParams = useSearchParams();
   const prompt = searchParams.get('prompt') || '';
   
@@ -297,5 +297,20 @@ export default function WebsiteBuilder() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function WebsiteBuilder() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <Loader />
+          <p className="text-gray-400 mt-4">Loading Website Builder...</p>
+        </div>
+      </div>
+    }>
+      <WebsiteBuilderContent />
+    </Suspense>
   );
 }
