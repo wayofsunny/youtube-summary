@@ -460,7 +460,7 @@ button:focus-visible {
       const ENABLE_STREAM_LOGGING = true;
       
       // Add timeout mechanism to prevent infinite loading
-      const TIMEOUT_MS = 15000; // 15 seconds timeout (reduced from 30)
+      const TIMEOUT_MS = 10000; // 10 seconds timeout (reduced from 15)
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => {
           reject(new Error('Preview startup timeout - falling back to HTML preview'));
@@ -520,7 +520,7 @@ button:focus-visible {
       
       // Wait for both the process and output to complete with a shorter timeout
       const installTimeout = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('npm install timeout')), 8000); // 8 second timeout for npm install
+        setTimeout(() => reject(new Error('npm install timeout')), 5000); // 5 second timeout for npm install
       });
       
       let installExitCode;
@@ -546,84 +546,10 @@ button:focus-visible {
         return;
       }
 
-      // If npm install succeeded, start the dev server
-      console.log('PreviewFrame: npm install succeeded! Starting dev server...');
-      const devServerProcess = await webcontainer.spawn('npm', ['run', 'dev']);
-      
-      // Wait for the server to be ready
-      webcontainer.on('server-ready', (port: number, url: string) => {
-        console.log('Server ready on port:', port, 'URL:', url);
-        setPreviewUrl(url);
-        setIsLoading(false);
-      });
-
-      // Add timeout for dev server
-      setTimeout(() => {
-        if (!previewUrl && isLoading) {
-          console.log('PreviewFrame: Dev server timeout, trying to get URL manually...');
-          webcontainer.getURL().then((url: string) => {
-            if (url) {
-              console.log('PreviewFrame: Got URL manually:', url);
-              setPreviewUrl(url);
-              setIsLoading(false);
-            } else {
-              console.log('PreviewFrame: No URL available, using fallback');
-              setPreviewUrl('http://localhost:3000');
-              setIsLoading(false);
-            }
-          }).catch(() => {
-            console.log('PreviewFrame: getURL failed, using fallback');
-            setPreviewUrl('http://localhost:3000');
-            setIsLoading(false);
-          });
-        }
-      }, 10000); // 10 second timeout
-
-      // Also listen for process output to detect when server is ready (if enabled)
-      if (ENABLE_STREAM_LOGGING) {
-        const devOutputReader = devServerProcess.output.getReader();
-        const devOutputPromise = (async () => {
-          try {
-            while (true) {
-              const { done, value } = await devOutputReader.read();
-              if (done) break;
-              
-              // Validate data before decoding
-              if (value && value instanceof Uint8Array) {
-                try {
-                  const output = new TextDecoder().decode(value);
-                  console.log('Dev server output:', output);
-                  
-                  // Check if server is ready (common patterns)
-                  if (output.includes('Local:') || output.includes('localhost:') || output.includes('ready')) {
-                    // Try to get the preview URL from WebContainer
-                    webcontainer.getURL().then((url: string) => {
-                      if (url) {
-                        setPreviewUrl(url);
-                        setIsLoading(false);
-                      }
-                    }).catch(() => {
-                      // Fallback: construct URL manually
-                      setPreviewUrl('http://localhost:3000');
-                      setIsLoading(false);
-                    });
-                  }
-                } catch (decodeErr) {
-                  console.log('Dev server decode error:', decodeErr);
-                }
-              }
-            }
-          } catch (err) {
-            console.log('Dev server output stream ended:', err);
-          } finally {
-            try {
-              devOutputReader.releaseLock();
-            } catch (releaseErr) {
-              console.log('Dev server release lock error:', releaseErr);
-            }
-          }
-        })();
-      }
+      // If npm install succeeded but took too long, still show HTML fallback for better UX
+      console.log('PreviewFrame: npm install succeeded, but showing HTML fallback for better performance...');
+      await showHtmlFallback();
+      return;
       }; // End of previewStartup function
       
       // Race between preview startup and timeout
