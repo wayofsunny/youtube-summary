@@ -32,7 +32,7 @@ export function Builder() {
   const [error, setError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   
-  const webcontainer = useWebContainer();
+  const { webcontainer, isLoading: webContainerLoading, error: webContainerError, isReady } = useWebContainer();
 
   const [currentStep, setCurrentStep] = useState(1);
   const [activeTab, setActiveTab] = useState<'code' | 'preview'>('code');
@@ -297,6 +297,13 @@ export function Builder() {
               <p className="text-red-200 text-sm">{error}</p>
             </div>
           )}
+          {webContainerError && (
+            <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-3">
+              <p className="text-yellow-200 text-sm">
+                WebContainer not available: {webContainerError}
+              </p>
+            </div>
+          )}
         </div>
       </header>
       
@@ -353,7 +360,7 @@ export function Builder() {
               {activeTab === 'code' ? (
                 <CodeEditor file={selectedFile} />
               ) : (
-                <PreviewFrame webContainer={webcontainer} files={files} />
+                <PreviewFrame webcontainer={webcontainer} isReady={isReady} />
               )}
             </div>
           </div>

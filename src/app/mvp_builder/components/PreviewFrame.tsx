@@ -4,6 +4,7 @@ import { useWebContainer } from '../../../hooks/useWebContainer';
 interface PreviewFrameProps {
   webcontainer: any;
   isReady?: boolean;
+  files?: any[];
 }
 
 export function PreviewFrame({ webcontainer, isReady = false }: PreviewFrameProps) {
@@ -989,33 +990,76 @@ button:focus-visible {
   };
 
   if (!isReady) {
+    const hasSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined';
+    const isCrossOriginIsolated = window.crossOriginIsolated;
+    const isWebContainerSupported = hasSharedArrayBuffer && isCrossOriginIsolated;
+    
     return (
       <div className="flex items-center justify-center h-full text-gray-400">
-        <div className="text-center">
+        <div className="text-center max-w-md">
           <div className="text-4xl mb-4">⚡</div>
-          <p>WebContainer is initializing...</p>
-          <div className="text-xs mt-2 text-gray-500">
-            <div>WebContainer: {webcontainer ? '✅' : '❌'}</div>
-            <div>isReady: {isReady ? '✅' : '❌'}</div>
-            <div>SharedArrayBuffer: {typeof SharedArrayBuffer !== 'undefined' ? '✅' : '❌'}</div>
-            <div>Cross-Origin-Isolated: {window.crossOriginIsolated ? '✅' : '❌'}</div>
-            {!webcontainer && (
-              <div className="text-red-400 mt-4">
-                <div className="font-semibold">WebContainer failed to initialize</div>
-                <div className="mt-2 text-xs space-y-1">
-                  <div>This is likely due to browser security restrictions.</div>
-                  <div>Required: Chrome/Edge with proper security headers</div>
-                  <div>Check console for detailed error messages</div>
+          <p className="text-lg mb-4">WebContainer is initializing...</p>
+          
+          <div className="text-sm mt-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <span>WebContainer:</span>
+              <span className={webcontainer ? 'text-green-400' : 'text-red-400'}>
+                {webcontainer ? '✅ Ready' : '❌ Failed'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>SharedArrayBuffer:</span>
+              <span className={hasSharedArrayBuffer ? 'text-green-400' : 'text-red-400'}>
+                {hasSharedArrayBuffer ? '✅ Available' : '❌ Not Available'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Cross-Origin-Isolated:</span>
+              <span className={isCrossOriginIsolated ? 'text-green-400' : 'text-red-400'}>
+                {isCrossOriginIsolated ? '✅ Enabled' : '❌ Disabled'}
+              </span>
+            </div>
+          </div>
+          
+          {!isWebContainerSupported && (
+            <div className="mt-6 p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
+              <div className="text-red-200 font-semibold mb-2">WebContainer Not Supported</div>
+              <div className="text-xs text-red-300 space-y-1">
+                <div>Your browser doesn't support WebContainer due to security restrictions.</div>
+                <div className="mt-2 font-medium">Solutions:</div>
+                <ul className="list-disc list-inside mt-1 space-y-1">
+                  <li>Use Chrome 88+ or Edge 88+</li>
+                  <li>Enable proper security headers on your server</li>
+                  <li>Use HTTPS with Cross-Origin-Embedder-Policy and Cross-Origin-Opener-Policy headers</li>
+                </ul>
+                <div className="mt-3 flex gap-2">
                   <button
                     onClick={() => window.location.reload()}
-                    className="mt-2 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                    className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
                   >
                     Refresh Page
                   </button>
+                  <button
+                    onClick={() => {
+                      setError(null);
+                      setPreviewUrl('mock-preview');
+                      setIsLoading(false);
+                    }}
+                    className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
+                  >
+                    Show Mock Preview
+                  </button>
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
+          
+          {isWebContainerSupported && !webcontainer && (
+            <div className="mt-4 text-yellow-400 text-sm">
+              <div>WebContainer is supported but failed to initialize.</div>
+              <div className="mt-2">Check console for detailed error messages.</div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1084,8 +1128,8 @@ button:focus-visible {
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
               <h2 className="text-lg font-semibold text-blue-800 mb-2">🚀 Your Generated App</h2>
               <p className="text-blue-700">
-                This is a mock preview of your generated application. The WebContainer is experiencing 
-                internal errors, but your code has been successfully generated and is ready to use.
+                This is a mock preview of your generated application. WebContainer is not available due to browser 
+                security restrictions, but your code has been successfully generated and is ready to use.
               </p>
             </div>
             
@@ -1113,12 +1157,27 @@ button:focus-visible {
               </div>
             </div>
             
-            <div className="mt-6 bg-gray-50 border rounded-lg p-4">
-              <h3 className="font-semibold text-gray-800 mb-2">💡 Why This Happened</h3>
-              <p className="text-sm text-gray-600">
-                WebContainer is experiencing internal stream errors that prevent the live preview from working. 
-                This is a known issue with WebContainer in certain browser configurations. Your code generation 
-                was successful - you can use the generated files to create your application manually.
+            <div className="mt-6 bg-red-50 border border-red-200 rounded-lg p-4">
+              <h3 className="font-semibold text-red-800 mb-2">⚠️ WebContainer Issue</h3>
+              <p className="text-sm text-red-700 mb-3">
+                WebContainer requires SharedArrayBuffer and Cross-Origin-Isolated context, which are not available 
+                in your current browser configuration.
+              </p>
+              <div className="text-sm text-red-600">
+                <div className="font-medium mb-2">To enable WebContainer:</div>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Use Chrome 88+ or Edge 88+</li>
+                  <li>Enable proper security headers on your server</li>
+                  <li>Use HTTPS with Cross-Origin-Embedder-Policy and Cross-Origin-Opener-Policy headers</li>
+                </ul>
+              </div>
+            </div>
+            
+            <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
+              <h3 className="font-semibold text-green-800 mb-2">✅ Your Code is Ready</h3>
+              <p className="text-sm text-green-700">
+                Despite the WebContainer limitation, your application code has been successfully generated. 
+                You can copy the files from the file explorer and run them locally for full functionality.
               </p>
             </div>
           </div>

@@ -24,8 +24,8 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // Apply these headers only to the MVP builder page
-        source: '/mvp_builder/:path*',
+        // Apply these headers to all routes for WebContainer support
+        source: '/(.*)',
         headers: [
           {
             key: 'Cross-Origin-Opener-Policy',
@@ -34,6 +34,10 @@ const nextConfig: NextConfig = {
           {
             key: 'Cross-Origin-Embedder-Policy',
             value: 'credentialless',
+          },
+          {
+            key: 'Cross-Origin-Resource-Policy',
+            value: 'cross-origin',
           },
         ],
       },
