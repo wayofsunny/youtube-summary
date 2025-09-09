@@ -4,7 +4,6 @@ import { useWebContainer } from '../../../hooks/useWebContainer';
 interface PreviewFrameProps {
   webcontainer: any;
   isReady?: boolean;
-  files?: any[];
 }
 
 export function PreviewFrame({ webcontainer, isReady = false }: PreviewFrameProps) {
@@ -1031,6 +1030,7 @@ button:focus-visible {
                   <li>Use Chrome 88+ or Edge 88+</li>
                   <li>Enable proper security headers on your server</li>
                   <li>Use HTTPS with Cross-Origin-Embedder-Policy and Cross-Origin-Opener-Policy headers</li>
+                  <li>For Vercel deployment: Ensure vercel.json includes the required headers</li>
                 </ul>
                 <div className="mt-3 flex gap-2">
                   <button
@@ -1049,6 +1049,10 @@ button:focus-visible {
                   >
                     Show Mock Preview
                   </button>
+                </div>
+                <div className="mt-3 text-xs text-yellow-300">
+                  <strong>Note:</strong> Even if WebContainer doesn't work, your code is still generated successfully. 
+                  You can copy the files and run them locally.
                 </div>
               </div>
             </div>
