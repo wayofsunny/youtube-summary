@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useWebContainer } from '../../../hooks/useWebContainer';
+import { useWebContainer } from '../../../../hooks/useWebContainer';
 
 interface PreviewFrameProps {
   webcontainer: any;
@@ -16,263 +16,7 @@ export function PreviewFrame({ webcontainer, isReady = false }: PreviewFrameProp
     if (webcontainer && isReady) {
       startPreview();
     }
-  }, [webcontainer, isReady]); // Remove startPreview from dependencies to avoid infinite loop
-
-  // Listen for retry React app event
-  useEffect(() => {
-    const handleRetryReactApp = async () => {
-      if (webcontainer) {
-        console.log('PreviewFrame: Retry React app requested');
-        setIsLoading(true);
-        setError(null);
-        const success = await createWorkingReactApp();
-        if (!success) {
-          setError('Failed to create React app. Please check console for details.');
-          setIsLoading(false);
-        }
-      }
-    };
-
-    window.addEventListener('retry-react-app', handleRetryReactApp);
-    return () => window.removeEventListener('retry-react-app', handleRetryReactApp);
-  }, [webcontainer]);
-
-  const createWorkingReactApp = async () => {
-    if (!webcontainer) return false;
-    
-    console.log('PreviewFrame: Creating working React app from scratch...');
-    console.log('PreviewFrame: WebContainer limitations:', {
-      hasSharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined',
-      isCrossOriginIsolated: window.crossOriginIsolated,
-      userAgent: navigator.userAgent
-    });
-    
-    try {
-      // Create a minimal but working package.json
-      const workingPackageJson = {
-        "name": "webcontainer-react-app",
-        "version": "1.0.0",
-        "type": "module",
-        "scripts": {
-          "dev": "vite --host 0.0.0.0 --port 3000 --clearScreen false",
-          "build": "vite build",
-          "preview": "vite preview"
-        },
-        "dependencies": {
-          "react": "18.2.0",
-          "react-dom": "18.2.0"
-        },
-        "devDependencies": {
-          "@vitejs/plugin-react": "4.0.0",
-          "vite": "4.4.0"
-        }
-      };
-      
-      // Create vite.config.js
-      const viteConfig = `import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    host: '0.0.0.0',
-    port: 3000
-  }
-})`;
-      
-      // Create index.html
-      const indexHtml = `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>React App</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>`;
-      
-      // Create src/main.jsx
-      const mainJsx = `import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
-import './index.css'
-
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-)`;
-      
-      // Create src/App.jsx
-      const appJsx = `import { useState } from 'react'
-import './App.css'
-
-function App() {
-  const [count, setCount] = useState(0)
-
-  return (
-    <div className="App">
-      <h1>🚀 Your Generated App is Running!</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          ✅ WebContainer is working perfectly!<br/>
-          ✅ React app is running!<br/>
-          ✅ Hot reload is active!
-        </p>
-      </div>
-      <div className="status">
-        <h3>🎉 Success!</h3>
-        <p>Your app has been generated and is now running in WebContainer.</p>
-      </div>
-    </div>
-  )
-}
-
-export default App`;
-      
-      // Create src/index.css
-      const indexCss = `:root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-}`;
-      
-      // Create src/App.css
-      const appCss = `.App {
-  text-align: center;
-}
-
-.card {
-  padding: 2em;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  margin: 20px 0;
-}
-
-.status {
-  background: rgba(76, 175, 80, 0.2);
-  border: 1px solid rgba(76, 175, 80, 0.5);
-  padding: 20px;
-  border-radius: 10px;
-  margin: 20px 0;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  color: white;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-
-button:hover {
-  border-color: #646cff;
-}
-
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}`;
-      
-      // Write all files
-      await webcontainer.fs.writeFile('package.json', JSON.stringify(workingPackageJson, null, 2));
-      await webcontainer.fs.writeFile('vite.config.js', viteConfig);
-      await webcontainer.fs.writeFile('index.html', indexHtml);
-      await webcontainer.fs.writeFile('src/main.jsx', mainJsx);
-      await webcontainer.fs.writeFile('src/App.jsx', appJsx);
-      await webcontainer.fs.writeFile('src/index.css', indexCss);
-      await webcontainer.fs.writeFile('src/App.css', appCss);
-      
-      console.log('PreviewFrame: Created working React app files');
-      
-      // Try npm install with a shorter timeout
-      console.log('PreviewFrame: Installing dependencies for working React app...');
-      console.log('PreviewFrame: WebContainer limitations may affect npm install performance');
-      
-      const installProcess = await webcontainer.spawn('npm', ['install', '--force', '--no-audit', '--no-fund', '--loglevel=error']);
-      
-      // Wait for install with timeout
-      const installPromise = installProcess.exit;
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Install timeout - WebContainer limitations')), 10000); // 10 second timeout
-      });
-      
-      try {
-        const exitCode = await Promise.race([installPromise, timeoutPromise]);
-        console.log('PreviewFrame: npm install exit code:', exitCode);
-        
-        if (exitCode === 0) {
-          console.log('PreviewFrame: npm install succeeded!');
-          
-          // Start dev server
-          console.log('PreviewFrame: Starting dev server...');
-          const devServerProcess = await webcontainer.spawn('npm', ['run', 'dev']);
-          
-          // Wait for server to start
-          await new Promise(resolve => setTimeout(resolve, 3000)); // Shorter wait
-          
-          // Try to get URL
-          try {
-            const url = webcontainer.getURL();
-            console.log('PreviewFrame: Dev server URL:', url);
-            setPreviewUrl(url);
-            setIsLoading(false);
-            return true;
-          } catch (urlErr) {
-            console.log('PreviewFrame: getURL failed, using localhost:', urlErr);
-            setPreviewUrl('http://localhost:3000');
-            setIsLoading(false);
-            return true;
-          }
-        } else {
-          console.log('PreviewFrame: npm install failed with exit code:', exitCode);
-          console.log('PreviewFrame: This is common in WebContainer due to network/security limitations');
-        }
-      } catch (installErr) {
-        console.log('PreviewFrame: npm install failed or timed out:', installErr);
-        console.log('PreviewFrame: WebContainer limitations detected - falling back to HTML preview');
-      }
-      
-      return false;
-    } catch (err) {
-      console.error('PreviewFrame: Failed to create working React app:', err);
-      return false;
-    }
-  };
+  }, [webcontainer, isReady]);
 
   const showHtmlFallback = async () => {
     if (!webcontainer) return;
@@ -286,7 +30,7 @@ button:focus-visible {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Generated App</title>
+  <title>Generated Website</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -357,13 +101,13 @@ button:focus-visible {
 </head>
 <body>
   <div class="container">
-    <h1>🚀 Your App is Ready!</h1>
+    <h1>🚀 Your Website is Ready!</h1>
     <div class="status">
-      <strong>✅ WebContainer Initialized Successfully</strong><br>
-      Your application has been generated and is ready to use.
+      <strong>✅ Website Generated Successfully</strong><br>
+      Your website has been created and is ready to use.
     </div>
     
-    <p>This is a fallback preview since WebContainer encountered limitations, but your code has been successfully generated!</p>
+    <p>This is a fallback preview since WebContainer encountered limitations, but your website has been successfully generated!</p>
     
     <div style="background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.5); padding: 15px; border-radius: 10px; margin: 20px 0; text-align: left;">
       <h4 style="color: #ffc107; margin-top: 0;">⚠️ WebContainer Limitations</h4>
@@ -377,14 +121,14 @@ button:focus-visible {
       </ul>
       <p style="margin: 10px 0; font-size: 14px;"><strong>Solution:</strong> Copy the generated code and run it locally for full functionality.</p>
       <div style="background: rgba(76, 175, 80, 0.1); border: 1px solid rgba(76, 175, 80, 0.5); padding: 10px; border-radius: 5px; margin-top: 10px;">
-        <p style="margin: 0; font-size: 13px; color: #4caf50;"><strong>✅ Good News:</strong> Your code has been successfully generated! The WebContainer limitation doesn't affect the quality of your generated application.</p>
+        <p style="margin: 0; font-size: 13px; color: #4caf50;"><strong>✅ Good News:</strong> Your website has been successfully generated! The WebContainer limitation doesn't affect the quality of your generated website.</p>
       </div>
     </div>
     
     <div class="features">
       <div class="feature">
         <h3>📁 Files Created</h3>
-        <p>All project files have been generated and are available in the file explorer.</p>
+        <p>All website files have been generated and are available in the file explorer.</p>
       </div>
       <div class="feature">
         <h3>⚡ WebContainer Active</h3>
@@ -392,16 +136,13 @@ button:focus-visible {
       </div>
       <div class="feature">
         <h3>🛠️ Next Steps</h3>
-        <p>Copy the generated code and create your project manually, or try refreshing to retry the preview.</p>
+        <p>Copy the generated code and create your website manually, or try refreshing to retry the preview.</p>
       </div>
     </div>
     
     <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
       <button class="refresh-btn" onclick="window.location.reload()">
         🔄 Retry Preview
-      </button>
-      <button class="refresh-btn" onclick="window.dispatchEvent(new CustomEvent('retry-react-app'))">
-        ⚛️ Try React App
       </button>
     </div>
   </div>
@@ -459,11 +200,8 @@ button:focus-visible {
       setIsLoading(true);
       setError(null);
       
-      // Enable stream logging to debug npm install issues
-      const ENABLE_STREAM_LOGGING = true;
-      
       // Add timeout mechanism to prevent infinite loading
-      const TIMEOUT_MS = 15000; // 15 seconds timeout (increased to allow dev server startup)
+      const TIMEOUT_MS = 15000; // 15 seconds timeout
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => {
           reject(new Error('Preview startup timeout - falling back to HTML preview'));
@@ -476,7 +214,6 @@ button:focus-visible {
         try {
           const packageJsonExists = await webcontainer.fs.readFile('package.json', 'utf-8');
           console.log('PreviewFrame: package.json exists:', !!packageJsonExists);
-          console.log('PreviewFrame: package.json content preview:', packageJsonExists.substring(0, 200) + '...');
         } catch (err) {
           console.error('PreviewFrame: package.json not found:', err);
           setError('package.json not found. Cannot start preview.');
@@ -484,110 +221,70 @@ button:focus-visible {
           return;
         }
 
-      // Install dependencies with optimized flags for faster installation
-      console.log('PreviewFrame: Installing dependencies...');
-      const installProcess = await webcontainer.spawn('npm', ['install', '--prefer-offline', '--no-audit', '--no-fund', '--loglevel=error']);
-      
-      // Capture npm install output for debugging
-      let installOutput = '';
-      const installOutputReader = installProcess.output.getReader();
-      const installOutputPromise = (async () => {
+        // Install dependencies with optimized flags for faster installation
+        console.log('PreviewFrame: Installing dependencies...');
+        const installProcess = await webcontainer.spawn('npm', ['install', '--prefer-offline', '--no-audit', '--no-fund', '--loglevel=error']);
+        
+        // Wait for both the process and output to complete with a shorter timeout
+        const installTimeout = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('npm install timeout')), 8000); // 8 second timeout for npm install
+        });
+        
+        let installExitCode;
         try {
-          while (true) {
-            const { done, value } = await installOutputReader.read();
-            if (done) break;
-            
-            // Validate data before decoding
-            if (value && value instanceof Uint8Array) {
-              try {
-                const output = new TextDecoder().decode(value);
-                installOutput += output;
-                if (ENABLE_STREAM_LOGGING) {
-                  console.log('npm install output:', output);
-                }
-              } catch (decodeErr) {
-                console.log('npm install decode error:', decodeErr);
-              }
-            }
-          }
-        } catch (err) {
-          console.log('npm install output stream ended:', err);
-        } finally {
-          try {
-            installOutputReader.releaseLock();
-          } catch (releaseErr) {
-            console.log('npm install release lock error:', releaseErr);
-          }
+          const result = await Promise.race([
+            installProcess.exit,
+            installTimeout
+          ]) as [number, void];
+          installExitCode = result[0];
+          console.log('PreviewFrame: npm install exit code:', installExitCode);
+        } catch (installTimeoutError) {
+          console.log('PreviewFrame: npm install timed out, trying to continue with existing files...');
+          installExitCode = 1; // Treat timeout as failure
         }
-      })();
-      
-      // Wait for both the process and output to complete with a shorter timeout
-      const installTimeout = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('npm install timeout')), 8000); // 8 second timeout for npm install
-      });
-      
-      let installExitCode;
-      try {
-        const result = await Promise.race([
-          Promise.all([installProcess.exit, installOutputPromise]),
-          installTimeout
-        ]) as [number, void];
-        installExitCode = result[0];
-      console.log('PreviewFrame: npm install exit code:', installExitCode);
-      console.log('PreviewFrame: npm install full output:', installOutput);
-      } catch (installTimeoutError) {
-        console.log('PreviewFrame: npm install timed out, trying to continue with existing files...');
-        installExitCode = 1; // Treat timeout as failure
-      }
-      
-      if (installExitCode !== 0) {
-        console.error('PreviewFrame: npm install failed with exit code:', installExitCode);
-        console.log('PreviewFrame: This is common in WebContainer due to network/security limitations');
         
-        // Try to create a working React app first before falling back to HTML
-        console.log('PreviewFrame: Attempting to create working React app...');
-        const reactAppSuccess = await createWorkingReactApp();
-        
-        if (!reactAppSuccess) {
-          // If React app creation fails, show HTML fallback
-          console.log('PreviewFrame: React app creation failed, showing HTML fallback');
+        if (installExitCode !== 0) {
+          console.error('PreviewFrame: npm install failed with exit code:', installExitCode);
+          console.log('PreviewFrame: This is common in WebContainer due to network/security limitations');
+          
+          // Show HTML fallback immediately
+          console.log('PreviewFrame: Showing HTML fallback...');
           await showHtmlFallback();
+          return;
         }
-                return;
-      }
 
-      // If npm install succeeded, try to start the dev server
-      console.log('PreviewFrame: npm install succeeded! Starting dev server...');
-      const devServerProcess = await webcontainer.spawn('npm', ['run', 'dev']);
-      
-      // Wait for the server to be ready
-      webcontainer.on('server-ready', (port: number, url: string) => {
-        console.log('Server ready on port:', port, 'URL:', url);
-        setPreviewUrl(url);
-        setIsLoading(false);
-      });
+        // If npm install succeeded, try to start the dev server
+        console.log('PreviewFrame: npm install succeeded! Starting dev server...');
+        const devServerProcess = await webcontainer.spawn('npm', ['run', 'dev']);
+        
+        // Wait for the server to be ready
+        webcontainer.on('server-ready', (port: number, url: string) => {
+          console.log('Server ready on port:', port, 'URL:', url);
+          setPreviewUrl(url);
+          setIsLoading(false);
+        });
 
-      // Add timeout for dev server
-      setTimeout(() => {
-        if (!previewUrl && isLoading) {
-          console.log('PreviewFrame: Dev server timeout, trying to get URL manually...');
-          webcontainer.getURL().then((url: string) => {
-            if (url) {
-              console.log('PreviewFrame: Got URL manually:', url);
-              setPreviewUrl(url);
-              setIsLoading(false);
-            } else {
-              console.log('PreviewFrame: No URL available, using fallback');
+        // Add timeout for dev server
+        setTimeout(() => {
+          if (!previewUrl && isLoading) {
+            console.log('PreviewFrame: Dev server timeout, trying to get URL manually...');
+            webcontainer.getURL().then((url: string) => {
+              if (url) {
+                console.log('PreviewFrame: Got URL manually:', url);
+                setPreviewUrl(url);
+                setIsLoading(false);
+              } else {
+                console.log('PreviewFrame: No URL available, using fallback');
+                setPreviewUrl('http://localhost:3000');
+                setIsLoading(false);
+              }
+            }).catch(() => {
+              console.log('PreviewFrame: getURL failed, using fallback');
               setPreviewUrl('http://localhost:3000');
               setIsLoading(false);
-            }
-          }).catch(() => {
-            console.log('PreviewFrame: getURL failed, using fallback');
-            setPreviewUrl('http://localhost:3000');
-            setIsLoading(false);
-          });
-        }
-      }, 8000); // 8 second timeout for dev server
+            });
+          }
+        }, 8000); // 8 second timeout for dev server
       }; // End of previewStartup function
       
       // Race between preview startup and timeout
@@ -596,15 +293,9 @@ button:focus-visible {
       } catch (err) {
         console.error('Preview startup failed or timed out:', err);
         
-        // Try to create a working React app first
-        console.log('PreviewFrame: Attempting to create working React app...');
-        const reactAppSuccess = await createWorkingReactApp();
-        
-        if (!reactAppSuccess) {
-          // If React app creation fails, show HTML fallback
-          console.log('PreviewFrame: React app creation failed, showing HTML fallback');
-          await showHtmlFallback();
-        }
+        // Show HTML fallback
+        console.log('PreviewFrame: Showing HTML fallback');
+        await showHtmlFallback();
       }
 
     } catch (err) {
@@ -677,18 +368,18 @@ button:focus-visible {
                   </button>
                 </div>
                 <div className="mt-3 text-xs text-yellow-300">
-                  <strong>Note:</strong> Even if WebContainer doesn't work, your code is still generated successfully. 
+                  <strong>Note:</strong> Even if WebContainer doesn't work, your website is still generated successfully. 
                   You can copy the files and run them locally.
                 </div>
-                </div>
               </div>
-            )}
+            </div>
+          )}
           
           {isWebContainerSupported && !webcontainer && (
             <div className="mt-4 text-yellow-400 text-sm">
               <div>WebContainer is supported but failed to initialize.</div>
               <div className="mt-2">Check console for detailed error messages.</div>
-          </div>
+            </div>
           )}
         </div>
       </div>
@@ -756,10 +447,10 @@ button:focus-visible {
         <div className="p-6 h-full overflow-auto">
           <div className="max-w-4xl mx-auto">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <h2 className="text-lg font-semibold text-blue-800 mb-2">🚀 Your Generated App</h2>
+              <h2 className="text-lg font-semibold text-blue-800 mb-2">🚀 Your Generated Website</h2>
               <p className="text-blue-700">
-                This is a mock preview of your generated application. WebContainer is not available due to browser 
-                security restrictions, but your code has been successfully generated and is ready to use.
+                This is a mock preview of your generated website. WebContainer is not available due to browser 
+                security restrictions, but your website has been successfully generated and is ready to use.
               </p>
             </div>
             
@@ -804,9 +495,9 @@ button:focus-visible {
             </div>
             
             <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
-              <h3 className="font-semibold text-green-800 mb-2">✅ Your Code is Ready</h3>
+              <h3 className="font-semibold text-green-800 mb-2">✅ Your Website is Ready</h3>
               <p className="text-sm text-green-700">
-                Despite the WebContainer limitation, your application code has been successfully generated. 
+                Despite the WebContainer limitation, your website has been successfully generated. 
                 You can copy the files from the file explorer and run them locally for full functionality.
               </p>
             </div>
