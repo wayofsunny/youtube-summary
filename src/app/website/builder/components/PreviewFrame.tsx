@@ -291,13 +291,13 @@ body {
           
           // Try to get URL from WebContainer
           try {
-            const url = webcontainer.getURL();
-            console.log('PreviewFrame: Server URL:', url);
-            setPreviewUrl(url);
+            // WebContainer doesn't have getURL method, use localhost fallback
+            console.log('PreviewFrame: Using localhost fallback URL');
+            setPreviewUrl('http://localhost:3000');
             setIsLoading(false);
             return;
           } catch (urlErr) {
-            console.log('PreviewFrame: getURL failed, using fallback URL:', urlErr);
+            console.log('PreviewFrame: URL setup failed, using fallback URL:', urlErr);
             // Fallback to localhost
             setPreviewUrl('http://localhost:3000');
             setIsLoading(false);
@@ -505,13 +505,13 @@ body {
         
         // Try to get URL from WebContainer
         try {
-          const url = webcontainer.getURL();
-          console.log('PreviewFrame: Server URL:', url);
-          setPreviewUrl(url);
+          // WebContainer doesn't have getURL method, use localhost fallback
+          console.log('PreviewFrame: Using localhost fallback URL');
+          setPreviewUrl('http://localhost:3000');
           setIsLoading(false);
           return;
         } catch (urlErr) {
-          console.log('PreviewFrame: getURL failed, using fallback URL:', urlErr);
+          console.log('PreviewFrame: URL setup failed, using fallback URL:', urlErr);
           // Fallback to localhost
           setPreviewUrl('http://localhost:3000');
           setIsLoading(false);

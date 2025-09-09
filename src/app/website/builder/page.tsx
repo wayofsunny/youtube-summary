@@ -1,18 +1,19 @@
 "use client";
 
+// Website Builder Page Component
 import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { StepsList } from './components/StepsList';
-import { FileExplorer } from './components/FileExplorer';
-import { TabView } from './components/TabView';
-import { CodeEditor } from './components/CodeEditor';
-import { PreviewFrame } from './components/PreviewFrame';
-import { Step, FileItem, StepType } from './types';
+import { StepsList } from '@/app/website/builder/components/StepsList';
+import { FileExplorer } from '@/app/website/builder/components/FileExplorer';
+import { TabView } from '@/app/website/builder/components/TabView';
+import { CodeEditor } from '@/app/website/builder/components/CodeEditor';
+import { PreviewFrame } from '@/app/website/builder/components/PreviewFrame';
+import { Step, FileItem, StepType } from '@/app/website/builder/types';
 import axios from 'axios';
-import { BACKEND_URL } from './config';
-import { parseXml } from './steps';
-import { useWebContainer } from './hooks/useWebContainer';
-import { Loader } from './components/Loader';
+import { BACKEND_URL } from '@/app/website/builder/config';
+import { parseXml } from '@/app/website/builder/steps';
+import { useWebContainer } from '@/app/website/builder/hooks/useWebContainer';
+import { Loader } from '@/app/website/builder/components/Loader';
 import { ArrowLeft, Send } from 'lucide-react';
 import Link from 'next/link';
 
@@ -162,7 +163,7 @@ function WebsiteBuilderContent() {
 
     setLoading(false);
 
-    setSteps(s => [...s, ...parseXml(stepsResponse.data.response).map(x => ({
+    setSteps(s => [...s, ...parseXml(stepsResponse.data.response).map((x: Step) => ({
       ...x,
       status: "pending" as "pending"
     }))]);
@@ -202,7 +203,7 @@ function WebsiteBuilderContent() {
         content: stepsResponse.data.response
       }]);
       
-      setSteps(s => [...s, ...parseXml(stepsResponse.data.response).map(x => ({
+      setSteps(s => [...s, ...parseXml(stepsResponse.data.response).map((x: Step) => ({
         ...x,
         status: "pending" as "pending"
       }))]);
